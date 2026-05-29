@@ -1,7 +1,7 @@
 'use client';
 
-import { AlertTriangle, Clipboard, Loader2, Play, ShieldAlert } from 'lucide-react';
-import { useState } from 'react';
+import { AlertTriangle, CheckCircle2, Clipboard, Loader2, Play, ShieldAlert } from 'lucide-react';
+import { useRef, useState } from 'react';
 import { fetchDemoReview } from '@/lib/api';
 import type { ReviewAnalysisResponse } from '@/lib/types';
 
@@ -23,18 +23,27 @@ export default function DemoAnalysisPage() {
   const [analysis, setAnalysis] = useState<ReviewAnalysisResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [demoStatus, setDemoStatus] = useState<'idle' | 'loaded'>('idle');
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const resultsRef = useRef<HTMLElement | null>(null);
 
   async function handleTryDemo() {
     setIsLoading(true);
     setErrorMessage(null);
+    setDemoStatus('idle');
     setCopyState('idle');
 
     try {
-      setAnalysis(await fetchDemoReview());
+      const result = await fetchDemoReview();
+      setAnalysis(result);
+      setDemoStatus('loaded');
+      window.setTimeout(() => {
+        resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       setErrorMessage(`${message}. Please make sure the backend is running at http://localhost:8080.`);
+      setDemoStatus('idle');
     } finally {
       setIsLoading(false);
     }
@@ -75,18 +84,24 @@ export default function DemoAnalysisPage() {
           </p>
           <div className="mt-8 flex flex-wrap gap-3" id="demo">
             <button
-              className="inline-flex items-center gap-2 rounded-full bg-indigo-600 px-6 py-3 text-sm font-bold text-white shadow-xl shadow-indigo-200 transition hover:bg-indigo-700 disabled:opacity-70"
+              className="inline-flex items-center gap-2 rounded-full bg-indigo-600 px-6 py-3 text-sm font-bold text-white shadow-xl shadow-indigo-200 transition hover:-translate-y-0.5 hover:bg-indigo-700 active:translate-y-0 disabled:opacity-70"
               disabled={isLoading}
               onClick={handleTryDemo}
               type="button"
             >
               {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-              Try Demo
+              {isLoading ? 'Loading Demo...' : analysis ? 'Reload Demo' : 'Try Demo'}
             </button>
             <span className="rounded-full border border-emerald-200 bg-emerald-50 px-5 py-3 text-sm font-semibold text-emerald-700">
               Stable backend demo data
             </span>
           </div>
+          {demoStatus === 'loaded' ? (
+            <div className="mt-6 flex max-w-2xl gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold leading-6 text-emerald-700">
+              <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0" />
+              <p>Demo loaded successfully. Results are ready below.</p>
+            </div>
+          ) : null}
           {errorMessage ? (
             <div className="mt-6 flex max-w-2xl gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm leading-6 text-red-700">
               <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
@@ -106,7 +121,7 @@ export default function DemoAnalysisPage() {
         </aside>
       </section>
 
-      <section className="mx-auto max-w-7xl pb-16" id="results">
+      <section className="mx-auto max-w-7xl scroll-mt-8 pb-16" id="results" ref={resultsRef}>
         {!analysis ? (
           <div className="rounded-[2rem] border border-dashed border-slate-300 bg-white/60 p-10 text-center text-slate-600">
             Click <span className="font-bold text-indigo-600">Try Demo</span> to load a complete review result.
@@ -189,8 +204,13 @@ export default function DemoAnalysisPage() {
             <section className="rounded-[2rem] border border-white/70 bg-slate-950 p-6 text-white shadow-lg shadow-slate-300/30">
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <h2 className="text-2xl font-black">Markdown Report</h2>
-                <button className="inline-flex items-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-bold text-slate-950" onClick={handleCopyReport} type="button">
-                  <Clipboard className="h-4 w-4" /> Copy Report
+                <button className={`inline-flex items-center gap-2 rounded-full px-5 py-3 text-sm font-bold transition active:scale-95 ${
+                    copyState === 'copied'
+                      ? 'bg-emerald-300 text-emerald-950'
+                      : 'bg-white text-slate-950 hover:bg-slate-100'
+                  }`} onClick={handleCopyReport} type="button">
+                  {copyState === 'copied' ? <CheckCircle2 className="h-4 w-4" /> : <Clipboard className="h-4 w-4" />}
+                  {copyState === 'copied' ? 'Copied!' : 'Copy Report'}
                 </button>
               </div>
               <pre className="mt-6 max-h-96 overflow-auto whitespace-pre-wrap rounded-2xl bg-slate-900 p-5 text-sm leading-7 text-slate-100">{analysis.markdownReport}</pre>
