@@ -20,7 +20,7 @@ prpilot/
 
 ## Applications
 
-- `frontend/`: Vite, React, and TypeScript web application.
+- `frontend/`: Next.js, React, TypeScript, Tailwind CSS, and shadcn/ui-ready web application.
 - `backend/`: Spring Boot backend service for PR analysis APIs and rule-based review logic.
 - `examples/demo-app/`: Controlled demo app used to construct reviewable PR scenarios.
 
