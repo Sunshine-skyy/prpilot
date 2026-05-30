@@ -1,5 +1,6 @@
 package com.prpilot.service;
 
+import com.prpilot.client.LlmClient;
 import com.prpilot.dto.AnalyzeDiffRequest;
 import com.prpilot.dto.ChangeSummary;
 import com.prpilot.dto.FileChange;
@@ -19,15 +20,24 @@ public class ReviewAnalysisService {
     private final DiffParser diffParser;
     private final RiskRuleEngine riskRuleEngine;
     private final MarkdownReportGenerator markdownReportGenerator;
+    private final ContextBuilder contextBuilder;
+    private final ReviewPromptBuilder reviewPromptBuilder;
+    private final LlmClient llmClient;
 
     public ReviewAnalysisService(
             DiffParser diffParser,
             RiskRuleEngine riskRuleEngine,
-            MarkdownReportGenerator markdownReportGenerator
+            MarkdownReportGenerator markdownReportGenerator,
+            ContextBuilder contextBuilder,
+            ReviewPromptBuilder reviewPromptBuilder,
+            LlmClient llmClient
     ) {
         this.diffParser = diffParser;
         this.riskRuleEngine = riskRuleEngine;
         this.markdownReportGenerator = markdownReportGenerator;
+        this.contextBuilder = contextBuilder;
+        this.reviewPromptBuilder = reviewPromptBuilder;
+        this.llmClient = llmClient;
     }
 
     public ReviewAnalysisResponse analyzeDiff(AnalyzeDiffRequest request) {
@@ -35,7 +45,7 @@ public class ReviewAnalysisService {
         PullRequestInfo pullRequest = buildRawDiffPullRequestInfo(request, parsedFiles);
         RiskRuleResult riskRuleResult = riskRuleEngine.analyze(pullRequest, parsedFiles);
         ChangeSummary changeSummary = buildChangeSummary(request, riskRuleResult.files());
-        List<ReviewFinding> findings = List.of();
+        List<ReviewFinding> findings = generateFindings(request, pullRequest, changeSummary, riskRuleResult);
         String markdownReport = markdownReportGenerator.generate(
                 pullRequest,
                 changeSummary,
@@ -51,6 +61,29 @@ public class ReviewAnalysisService {
                 riskRuleResult.files(),
                 findings,
                 markdownReport
+        );
+    }
+
+    private List<ReviewFinding> generateFindings(
+            AnalyzeDiffRequest request,
+            PullRequestInfo pullRequest,
+            ChangeSummary changeSummary,
+            RiskRuleResult riskRuleResult
+    ) {
+        if (!llmClient.isAvailable()) {
+            return List.of();
+        }
+
+        String context = contextBuilder.buildReviewContext(
+                pullRequest,
+                changeSummary,
+                riskRuleResult.riskAssessment(),
+                riskRuleResult.files(),
+                request.focusAreas()
+        );
+        return llmClient.generateReviewFindings(
+                reviewPromptBuilder.buildSystemPrompt(),
+                reviewPromptBuilder.buildUserPrompt(context)
         );
     }
 
