@@ -78,6 +78,7 @@ export default function DemoAnalysisPage() {
         <nav className="hidden gap-6 text-sm font-semibold text-slate-600 md:flex">
           <a href="#analyze">Analyze</a>
           <a href="#results">Results</a>
+          <a href="#how-it-works">How It Works</a>
         </nav>
       </header>
 
@@ -135,6 +136,7 @@ export default function DemoAnalysisPage() {
       <section className="mx-auto max-w-6xl pb-16" id="results" ref={resultsRef}>
         {analysis ? <Results analysis={analysis} copyReport={copyReport} copyStatus={copyStatus} /> : <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center text-slate-600">Run an analysis or click Try Demo to load results.</div>}
       </section>
+      <HowItWorks />
     </main>
   );
 }
@@ -149,6 +151,37 @@ function TextArea({ label, monospace = false, onChange, placeholder, rows = 4, v
 
 function Results({ analysis, copyReport, copyStatus }: { analysis: ReviewAnalysisResponse; copyReport: () => void; copyStatus: string }) {
   return <div className="grid gap-6"><section className="grid gap-6 lg:grid-cols-2"><Card title="PR Overview"><h2 className="text-2xl font-black">{analysis.pullRequest.title}</h2><div className="mt-4 grid gap-2 text-sm text-slate-600 sm:grid-cols-2"><p>Author: {analysis.pullRequest.author}</p><p>State: {analysis.pullRequest.state}</p><p>Base: {analysis.pullRequest.baseBranch}</p><p>Head: {analysis.pullRequest.headBranch}</p><p>Files: {analysis.pullRequest.changedFiles}</p><p>Lines: +{analysis.pullRequest.additions} / -{analysis.pullRequest.deletions}</p></div></Card><Card title="Risk Assessment"><p className="text-5xl font-black">{analysis.riskAssessment.score}<span className="text-xl">/100</span></p><p className="mt-2 text-xl font-black">{analysis.riskAssessment.level}</p><ul className="mt-4 space-y-2 text-sm text-slate-600">{analysis.riskAssessment.reasons.map((reason) => <li key={reason}>- {reason}</li>)}</ul></Card></section><Card title="Change Summary"><p className="leading-8 text-slate-600">{analysis.changeSummary.overview}</p><ul className="mt-4 space-y-2 text-sm text-slate-600">{analysis.changeSummary.keyChanges.map((item) => <li key={item}>- {item}</li>)}</ul></Card><section className="grid gap-6 lg:grid-cols-2"><Card title="Changed Files"><div className="space-y-4">{analysis.files.map((file) => <div className="rounded-2xl bg-slate-50 p-4" key={file.filename}><p className="break-all font-bold">{file.filename}</p><p className="mt-1 text-sm text-slate-500">{file.status} · +{file.additions} / -{file.deletions}</p><div className="mt-3 flex flex-wrap gap-2">{file.riskTags.map((tag) => <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-600" key={tag}>{tag}</span>)}</div></div>)}</div></Card><Card title="Review Findings"><div className="space-y-4">{analysis.findings.length === 0 ? <p className="text-slate-600">No AI findings returned. Rule-based analysis is still available.</p> : analysis.findings.map((finding) => <article className="rounded-2xl border border-slate-200 p-4" key={`${finding.file}-${finding.title}`}><div className="flex gap-2"><span className="rounded-full bg-red-100 px-3 py-1 text-xs font-bold text-red-700">{finding.severity}</span><span className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-bold text-indigo-700">{finding.category}</span></div><h3 className="mt-3 font-black">{finding.title}</h3><p className="mt-1 break-all text-sm font-semibold text-slate-500">{finding.line ? `${finding.file}:${finding.line}` : finding.file}</p><p className="mt-3 text-sm leading-6 text-slate-600">{finding.description}</p><p className="mt-3 rounded-xl bg-slate-50 p-3 text-sm text-slate-700"><b>Suggestion:</b> {finding.suggestion}</p></article>)}</div></Card></section><section className="rounded-3xl bg-slate-950 p-6 text-white"><div className="flex items-center justify-between gap-4"><h2 className="text-2xl font-black">Markdown Report</h2><button className="rounded-full bg-white px-5 py-3 text-sm font-bold text-slate-950" onClick={copyReport} type="button">{copyStatus || 'Copy Report'}</button></div><pre className="mt-6 max-h-96 overflow-auto whitespace-pre-wrap rounded-2xl bg-slate-900 p-5 text-sm leading-7">{analysis.markdownReport}</pre></section></div>;
+}
+
+function HowItWorks() {
+  return (
+    <section className="mx-auto max-w-6xl pb-20" id="how-it-works">
+      <div className="rounded-3xl bg-white p-8 shadow-lg">
+        <p className="mb-3 text-sm font-bold uppercase tracking-[0.24em] text-indigo-600">How It Works</p>
+        <h2 className="text-3xl font-black">From pull request input to structured review report.</h2>
+        <div className="mt-8 grid gap-3 md:grid-cols-3 lg:grid-cols-6">
+          {['GitHub PR URL / Raw Diff', 'Diff Fetcher', 'Rule-based Risk Scan', 'Context Builder', 'LLM Review Agent', 'Structured Review Report'].map((step, index) => (
+            <div className="rounded-2xl bg-slate-50 p-4 text-sm font-bold text-slate-700" key={step}>
+              <span className="mb-2 block text-xs text-indigo-600">Step {index + 1}</span>
+              {step}
+            </div>
+          ))}
+        </div>
+        <div className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <Info title="Model Strategy" text="The backend uses an OpenAI-compatible LLM client. DashScope qwen-turbo is configured by default, while compatible providers can be selected through configuration." />
+          <Info title="Context Strategy" text="PRPilot builds structured context from PR metadata, changed files, patches, focus areas, and rule-based risk signals before calling the LLM." />
+          <Info title="Risk Analysis" text="A rule engine scans auth changes, config keywords, TODO/FIXME, debug logging, removed validation, sensitive files, and missing tests." />
+          <Info title="False Positive Control" text="The prompt asks the model to report only evidence-backed findings, lower confidence when evidence is weak, and avoid unrelated high-severity comments." />
+          <Info title="Fallback Modes" text="Raw Diff works when GitHub API access is limited, and Try Demo returns complete fixed data without GitHub or LLM dependencies." />
+          <Info title="Future Extensions" text="Future versions can add GitHub App integration, inline comments, team rules, AST analysis, caching, and GitLab or Gitee support." />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Info({ text, title }: { text: string; title: string }) {
+  return <article className="rounded-2xl border border-slate-100 bg-slate-50 p-5"><h3 className="font-black">{title}</h3><p className="mt-3 text-sm leading-6 text-slate-600">{text}</p></article>;
 }
 
 function Card({ children, title }: { children: React.ReactNode; title: string }) {
