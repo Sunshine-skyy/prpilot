@@ -2,8 +2,10 @@ package com.prpilot.service;
 
 import com.prpilot.client.LlmClient;
 import com.prpilot.dto.AnalyzeDiffRequest;
+import com.prpilot.dto.AnalyzePullRequestRequest;
 import com.prpilot.dto.ChangeSummary;
 import com.prpilot.dto.FileChange;
+import com.prpilot.dto.GitHubPullRequestFetchResponse;
 import com.prpilot.dto.PullRequestInfo;
 import com.prpilot.dto.ReviewAnalysisResponse;
 import com.prpilot.dto.ReviewFinding;
@@ -23,6 +25,7 @@ public class ReviewAnalysisService {
     private final ContextBuilder contextBuilder;
     private final ReviewPromptBuilder reviewPromptBuilder;
     private final LlmClient llmClient;
+    private final GitHubPullRequestService gitHubPullRequestService;
 
     public ReviewAnalysisService(
             DiffParser diffParser,
@@ -30,7 +33,8 @@ public class ReviewAnalysisService {
             MarkdownReportGenerator markdownReportGenerator,
             ContextBuilder contextBuilder,
             ReviewPromptBuilder reviewPromptBuilder,
-            LlmClient llmClient
+            LlmClient llmClient,
+            GitHubPullRequestService gitHubPullRequestService
     ) {
         this.diffParser = diffParser;
         this.riskRuleEngine = riskRuleEngine;
@@ -38,14 +42,37 @@ public class ReviewAnalysisService {
         this.contextBuilder = contextBuilder;
         this.reviewPromptBuilder = reviewPromptBuilder;
         this.llmClient = llmClient;
+        this.gitHubPullRequestService = gitHubPullRequestService;
     }
 
     public ReviewAnalysisResponse analyzeDiff(AnalyzeDiffRequest request) {
         List<FileChange> parsedFiles = diffParser.parse(request.diff());
         PullRequestInfo pullRequest = buildRawDiffPullRequestInfo(request, parsedFiles);
-        RiskRuleResult riskRuleResult = riskRuleEngine.analyze(pullRequest, parsedFiles);
-        ChangeSummary changeSummary = buildChangeSummary(request, riskRuleResult.files());
-        List<ReviewFinding> findings = generateFindings(request, pullRequest, changeSummary, riskRuleResult);
+        return analyzeFiles(pullRequest, parsedFiles, request.description(), request.focusAreas());
+    }
+
+    public ReviewAnalysisResponse analyzePullRequest(AnalyzePullRequestRequest request) {
+        GitHubPullRequestFetchResponse fetchedPullRequest = gitHubPullRequestService.fetchPullRequest(
+                request.prUrl(),
+                request.githubToken()
+        );
+        return analyzeFiles(
+                fetchedPullRequest.pullRequest(),
+                fetchedPullRequest.files(),
+                null,
+                request.focusAreas()
+        );
+    }
+
+    private ReviewAnalysisResponse analyzeFiles(
+            PullRequestInfo pullRequest,
+            List<FileChange> files,
+            String description,
+            List<String> focusAreas
+    ) {
+        RiskRuleResult riskRuleResult = riskRuleEngine.analyze(pullRequest, files);
+        ChangeSummary changeSummary = buildChangeSummary(description, riskRuleResult.files());
+        List<ReviewFinding> findings = generateFindings(pullRequest, changeSummary, riskRuleResult, focusAreas);
         String markdownReport = markdownReportGenerator.generate(
                 pullRequest,
                 changeSummary,
@@ -65,10 +92,10 @@ public class ReviewAnalysisService {
     }
 
     private List<ReviewFinding> generateFindings(
-            AnalyzeDiffRequest request,
             PullRequestInfo pullRequest,
             ChangeSummary changeSummary,
-            RiskRuleResult riskRuleResult
+            RiskRuleResult riskRuleResult,
+            List<String> focusAreas
     ) {
         if (!llmClient.isAvailable()) {
             return List.of();
@@ -79,7 +106,7 @@ public class ReviewAnalysisService {
                 changeSummary,
                 riskRuleResult.riskAssessment(),
                 riskRuleResult.files(),
-                request.focusAreas()
+                focusAreas
         );
         return llmClient.generateReviewFindings(
                 reviewPromptBuilder.buildSystemPrompt(),
@@ -101,8 +128,8 @@ public class ReviewAnalysisService {
         );
     }
 
-    private ChangeSummary buildChangeSummary(AnalyzeDiffRequest request, List<FileChange> files) {
-        String overview = buildOverview(request, files);
+    private ChangeSummary buildChangeSummary(String description, List<FileChange> files) {
+        String overview = buildOverview(description, files);
         List<String> keyChanges = files.stream()
                 .map(file -> "%s changed with +%d / -%d lines".formatted(
                         file.filename(),
@@ -118,14 +145,14 @@ public class ReviewAnalysisService {
         return new ChangeSummary(overview, keyChanges, impactedAreas);
     }
 
-    private String buildOverview(AnalyzeDiffRequest request, List<FileChange> files) {
-        if (StringUtils.hasText(request.description())) {
-            return request.description();
+    private String buildOverview(String description, List<FileChange> files) {
+        if (StringUtils.hasText(description)) {
+            return description;
         }
         if (files.isEmpty()) {
-            return "Raw diff input did not contain any parseable file changes.";
+            return "No parseable file changes were found for this analysis.";
         }
-        return "Raw diff analysis parsed %d changed file%s with %d additions and %d deletions."
+        return "PRPilot analyzed %d changed file%s with %d additions and %d deletions."
                 .formatted(
                         files.size(),
                         files.size() == 1 ? "" : "s",
