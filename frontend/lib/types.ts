@@ -57,3 +57,18 @@ export type ReviewAnalysisResponse = {
   findings: ReviewFinding[];
   markdownReport: string;
 };
+
+export type FocusArea = 'security' | 'bug-risk' | 'performance' | 'maintainability' | 'testing';
+
+export type AnalyzePullRequestRequest = {
+  prUrl: string;
+  githubToken?: string;
+  focusAreas: FocusArea[];
+};
+
+export type AnalyzeDiffRequest = {
+  title: string;
+  description: string;
+  diff: string;
+  focusAreas: FocusArea[];
+};

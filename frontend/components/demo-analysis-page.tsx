@@ -1,234 +1,156 @@
 'use client';
 
-import { AlertTriangle, CheckCircle2, Clipboard, Loader2, Play, ShieldAlert } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { useRef, useState } from 'react';
-import { fetchDemoReview } from '@/lib/api';
-import type { ReviewAnalysisResponse } from '@/lib/types';
+import { analyzePullRequest, analyzeRawDiff, fetchDemoReview } from '@/lib/api';
+import type { FocusArea, ReviewAnalysisResponse } from '@/lib/types';
 
-function riskTone(level: string) {
-  if (level.toLowerCase() === 'high') return 'border-orange-200 bg-orange-50 text-orange-700';
-  if (level.toLowerCase() === 'critical') return 'border-red-200 bg-red-50 text-red-700';
-  if (level.toLowerCase() === 'medium') return 'border-amber-200 bg-amber-50 text-amber-700';
-  return 'border-emerald-200 bg-emerald-50 text-emerald-700';
-}
-
-function severityTone(severity: string) {
-  const value = severity.toLowerCase();
-  if (value === 'critical' || value === 'high') return 'bg-red-100 text-red-700';
-  if (value === 'medium') return 'bg-amber-100 text-amber-700';
-  return 'bg-slate-100 text-slate-700';
-}
+const focusOptions: { value: FocusArea; label: string }[] = [
+  { value: 'security', label: 'Security' },
+  { value: 'bug-risk', label: 'Bug Risk' },
+  { value: 'performance', label: 'Performance' },
+  { value: 'maintainability', label: 'Maintainability' },
+  { value: 'testing', label: 'Testing' },
+];
 
 export default function DemoAnalysisPage() {
   const [analysis, setAnalysis] = useState<ReviewAnalysisResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [demoStatus, setDemoStatus] = useState<'idle' | 'loaded'>('idle');
-  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const [mode, setMode] = useState<'github' | 'raw'>('github');
+  const [prUrl, setPrUrl] = useState('');
+  const [githubToken, setGithubToken] = useState('');
+  const [rawTitle, setRawTitle] = useState('Improve auth middleware');
+  const [rawDescription, setRawDescription] = useState('This patch updates authentication behavior.');
+  const [rawDiff, setRawDiff] = useState('');
+  const [focusAreas, setFocusAreas] = useState<FocusArea[]>(['security', 'bug-risk', 'testing']);
+  const [loading, setLoading] = useState('');
+  const [error, setError] = useState('');
+  const [copyStatus, setCopyStatus] = useState('');
   const resultsRef = useRef<HTMLElement | null>(null);
 
-  async function handleTryDemo() {
-    setIsLoading(true);
-    setErrorMessage(null);
-    setDemoStatus('idle');
-    setCopyState('idle');
-
+  async function run(label: string, action: () => Promise<ReviewAnalysisResponse>) {
+    setLoading(label);
+    setError('');
+    setCopyStatus('');
     try {
-      const result = await fetchDemoReview();
-      setAnalysis(result);
-      setDemoStatus('loaded');
-      window.setTimeout(() => {
-        resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 100);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      setErrorMessage(`${message}. Please make sure the backend is running at http://localhost:8080.`);
-      setDemoStatus('idle');
+      setAnalysis(await action());
+      setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+    } catch (caught) {
+      setError(`${caught instanceof Error ? caught.message : 'Unknown error'}. Please make sure the backend is running.`);
     } finally {
-      setIsLoading(false);
+      setLoading('');
     }
   }
 
-  async function handleCopyReport() {
-    if (!analysis?.markdownReport) return;
+  function toggleFocus(value: FocusArea) {
+    setFocusAreas((current) => current.includes(value) ? current.filter((item) => item !== value) : [...current, value]);
+  }
 
+  function analyzePr() {
+    if (!prUrl.trim()) {
+      setError('Please enter a GitHub pull request URL.');
+      return;
+    }
+    void run('Analyzing PR...', () => analyzePullRequest({ prUrl, githubToken, focusAreas }));
+  }
+
+  function analyzeDiff() {
+    if (!rawDiff.trim()) {
+      setError('Please paste a raw diff.');
+      return;
+    }
+    void run('Analyzing Raw Diff...', () => analyzeRawDiff({ title: rawTitle, description: rawDescription, diff: rawDiff, focusAreas }));
+  }
+
+  async function copyReport() {
+    if (!analysis?.markdownReport) return;
     try {
       await navigator.clipboard.writeText(analysis.markdownReport);
-      setCopyState('copied');
+      setCopyStatus('Copied!');
     } catch {
-      setCopyState('failed');
+      setCopyStatus('Copy failed.');
     }
   }
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(79,70,229,0.20),_transparent_30rem),linear-gradient(135deg,_#f8fbff_0%,_#eef3ff_52%,_#f8fafc_100%)] px-6 py-8 text-slate-950">
-      <header className="mx-auto flex max-w-7xl items-center justify-between">
-        <div className="text-xl font-black tracking-tight">PRPilot</div>
+    <main className="min-h-screen bg-slate-50 px-6 py-8 text-slate-950">
+      <header className="mx-auto flex max-w-6xl items-center justify-between">
+        <div className="text-xl font-black">PRPilot</div>
         <nav className="hidden gap-6 text-sm font-semibold text-slate-600 md:flex">
           <a href="#analyze">Analyze</a>
-          <a href="#demo">Demo</a>
           <a href="#results">Results</a>
         </nav>
       </header>
 
-      <section className="mx-auto grid max-w-7xl gap-8 py-16 lg:grid-cols-[1fr_0.8fr] lg:items-center" id="analyze">
+      <section className="mx-auto grid max-w-6xl gap-8 py-12 lg:grid-cols-[0.9fr_1.1fr]" id="analyze">
         <div>
-          <p className="mb-4 text-sm font-bold uppercase tracking-[0.24em] text-indigo-600">
-            AI Pull Request Review Assistant
-          </p>
-          <h1 className="max-w-4xl text-5xl font-black tracking-[-0.08em] md:text-7xl">
-            Review risky pull requests before humans spend hours on them.
-          </h1>
-          <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-600">
-            PRPilot summarizes changes, scores risk, highlights risky files, and generates a Markdown review report that can be copied into GitHub PR comments.
-          </p>
-          <div className="mt-8 flex flex-wrap gap-3" id="demo">
-            <button
-              className="inline-flex items-center gap-2 rounded-full bg-indigo-600 px-6 py-3 text-sm font-bold text-white shadow-xl shadow-indigo-200 transition hover:-translate-y-0.5 hover:bg-indigo-700 active:translate-y-0 disabled:opacity-70"
-              disabled={isLoading}
-              onClick={handleTryDemo}
-              type="button"
-            >
-              {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-              {isLoading ? 'Loading Demo...' : analysis ? 'Reload Demo' : 'Try Demo'}
-            </button>
-            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-5 py-3 text-sm font-semibold text-emerald-700">
-              Stable backend demo data
-            </span>
-          </div>
-          {demoStatus === 'loaded' ? (
-            <div className="mt-6 flex max-w-2xl gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold leading-6 text-emerald-700">
-              <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0" />
-              <p>Demo loaded successfully. Results are ready below.</p>
-            </div>
-          ) : null}
-          {errorMessage ? (
-            <div className="mt-6 flex max-w-2xl gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm leading-6 text-red-700">
-              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
-              <p>{errorMessage}</p>
-            </div>
-          ) : null}
+          <p className="mb-4 text-sm font-bold uppercase tracking-[0.24em] text-indigo-600">AI Pull Request Review Assistant</p>
+          <h1 className="text-5xl font-black tracking-[-0.06em] md:text-6xl">Analyze pull requests before human review.</h1>
+          <p className="mt-6 text-lg leading-8 text-slate-600">Paste a GitHub PR URL or raw diff to get a change summary, risk score, AI findings, and a Markdown report.</p>
+          <button className="mt-8 rounded-full bg-indigo-600 px-6 py-3 text-sm font-bold text-white disabled:opacity-60" disabled={Boolean(loading)} onClick={() => void run('Loading Demo...', fetchDemoReview)} type="button">
+            {loading === 'Loading Demo...' ? 'Loading Demo...' : 'Try Demo'}
+          </button>
         </div>
 
-        <aside className="rounded-[2rem] border border-white/70 bg-white/75 p-6 shadow-2xl shadow-slate-300/40 backdrop-blur">
-          <p className="text-sm font-bold uppercase tracking-[0.16em] text-slate-400">Demo Scenario</p>
-          <h2 className="mt-2 text-2xl font-black">Risky auth change</h2>
-          <div className="mt-6 grid gap-3">
-            {['Authentication middleware', 'Configuration updates', 'Payment permission flow'].map((item) => (
-              <div className="rounded-2xl bg-slate-50 p-4 text-sm font-semibold text-slate-700" key={item}>{item}</div>
-            ))}
+        <div className="rounded-3xl bg-white p-6 shadow-xl">
+          <div className="grid grid-cols-2 rounded-full bg-slate-100 p-1 text-sm font-bold">
+            <button className={`rounded-full px-4 py-2 ${mode === 'github' ? 'bg-white text-indigo-700 shadow' : 'text-slate-500'}`} onClick={() => setMode('github')} type="button">GitHub PR</button>
+            <button className={`rounded-full px-4 py-2 ${mode === 'raw' ? 'bg-white text-indigo-700 shadow' : 'text-slate-500'}`} onClick={() => setMode('raw')} type="button">Raw Diff</button>
           </div>
-        </aside>
-      </section>
 
-      <section className="mx-auto max-w-7xl scroll-mt-8 pb-16" id="results" ref={resultsRef}>
-        {!analysis ? (
-          <div className="rounded-[2rem] border border-dashed border-slate-300 bg-white/60 p-10 text-center text-slate-600">
-            Click <span className="font-bold text-indigo-600">Try Demo</span> to load a complete review result.
-          </div>
-        ) : (
-          <div className="grid gap-6">
-            <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-              <section className="rounded-[2rem] border border-white/70 bg-white p-6 shadow-lg shadow-slate-300/30">
-                <p className="text-sm font-bold uppercase tracking-[0.16em] text-slate-400">PR Overview</p>
-                <h2 className="mt-3 text-2xl font-black">{analysis.pullRequest.title}</h2>
-                <div className="mt-5 grid gap-3 text-sm text-slate-600 sm:grid-cols-2">
-                  <p>Author: {analysis.pullRequest.author}</p>
-                  <p>State: {analysis.pullRequest.state}</p>
-                  <p>Base: {analysis.pullRequest.baseBranch}</p>
-                  <p>Head: {analysis.pullRequest.headBranch}</p>
-                </div>
-                <div className="mt-6 grid gap-3 sm:grid-cols-3">
-                  <Metric label="Files" value={analysis.pullRequest.changedFiles.toString()} />
-                  <Metric label="Additions" value={`+${analysis.pullRequest.additions}`} tone="text-emerald-700 bg-emerald-50" />
-                  <Metric label="Deletions" value={`-${analysis.pullRequest.deletions}`} tone="text-red-700 bg-red-50" />
-                </div>
-              </section>
+          <div className="mt-6 space-y-4">
+            {mode === 'github' ? (
+              <>
+                <Input label="GitHub PR URL" onChange={setPrUrl} placeholder="https://github.com/owner/repo/pull/123" value={prUrl} />
+                <Input label="GitHub token (optional)" onChange={setGithubToken} placeholder="Optional token" type="password" value={githubToken} />
+              </>
+            ) : (
+              <>
+                <Input label="Title" onChange={setRawTitle} value={rawTitle} />
+                <TextArea label="Description" onChange={setRawDescription} value={rawDescription} />
+                <TextArea label="Raw Diff" monospace onChange={setRawDiff} placeholder="diff --git a/src/file.ts b/src/file.ts..." rows={9} value={rawDiff} />
+              </>
+            )}
 
-              <section className={`rounded-[2rem] border p-6 shadow-lg shadow-slate-300/30 ${riskTone(analysis.riskAssessment.level)}`}>
-                <div className="flex items-center gap-3">
-                  <ShieldAlert className="h-8 w-8" />
-                  <p className="text-sm font-bold uppercase tracking-[0.16em]">Risk Assessment</p>
-                </div>
-                <p className="mt-5 text-6xl font-black tracking-[-0.08em]">{analysis.riskAssessment.score}<span className="text-2xl tracking-normal">/100</span></p>
-                <p className="mt-2 text-xl font-black">{analysis.riskAssessment.level}</p>
-                <ul className="mt-5 space-y-2 text-sm font-semibold leading-6">
-                  {analysis.riskAssessment.reasons.map((reason) => <li key={reason}>- {reason}</li>)}
-                </ul>
-              </section>
+            <div>
+              <p className="mb-3 text-sm font-bold text-slate-700">Focus Areas</p>
+              <div className="flex flex-wrap gap-2">
+                {focusOptions.map((option) => (
+                  <button className={`rounded-full px-3 py-2 text-xs font-bold ${focusAreas.includes(option.value) ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'}`} key={option.value} onClick={() => toggleFocus(option.value)} type="button">
+                    {option.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            <section className="rounded-[2rem] border border-white/70 bg-white p-6 shadow-lg shadow-slate-300/30">
-              <p className="text-sm font-bold uppercase tracking-[0.16em] text-slate-400">Change Summary</p>
-              <p className="mt-4 leading-8 text-slate-600">{analysis.changeSummary.overview}</p>
-              <div className="mt-6 flex flex-wrap gap-2">
-                {analysis.changeSummary.impactedAreas.map((area) => (
-                  <span className="rounded-full bg-indigo-50 px-3 py-1 text-sm font-bold text-indigo-700" key={area}>{area}</span>
-                ))}
-              </div>
-            </section>
-
-            <section className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
-              <div className="rounded-[2rem] border border-white/70 bg-white p-6 shadow-lg shadow-slate-300/30">
-                <p className="text-sm font-bold uppercase tracking-[0.16em] text-slate-400">Risky Files</p>
-                <div className="mt-5 space-y-4">
-                  {analysis.files.map((file) => (
-                    <article className="rounded-2xl bg-slate-50 p-4" key={file.filename}>
-                      <h3 className="break-all font-bold">{file.filename}</h3>
-                      <p className="mt-1 text-sm text-slate-500">{file.status} · +{file.additions} / -{file.deletions}</p>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {file.riskTags.map((tag) => <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-600" key={tag}>{tag}</span>)}
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <p className="text-sm font-bold uppercase tracking-[0.16em] text-slate-400">Review Findings</p>
-                {analysis.findings.map((finding) => (
-                  <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" key={`${finding.file}-${finding.title}`}>
-                    <div className="flex flex-wrap gap-2">
-                      <span className={`rounded-full px-3 py-1 text-xs font-bold ${severityTone(finding.severity)}`}>{finding.severity}</span>
-                      <span className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-bold text-indigo-700">{finding.category}</span>
-                    </div>
-                    <h3 className="mt-4 text-lg font-bold">{finding.title}</h3>
-                    <p className="mt-2 text-sm font-semibold text-slate-500">{finding.line ? `${finding.file}:${finding.line}` : finding.file}</p>
-                    <p className="mt-3 leading-7 text-slate-600">{finding.description}</p>
-                    <p className="mt-4 rounded-xl bg-slate-50 p-4 text-sm leading-6 text-slate-700"><span className="font-bold">Suggestion: </span>{finding.suggestion}</p>
-                  </article>
-                ))}
-              </div>
-            </section>
-
-            <section className="rounded-[2rem] border border-white/70 bg-slate-950 p-6 text-white shadow-lg shadow-slate-300/30">
-              <div className="flex flex-wrap items-center justify-between gap-4">
-                <h2 className="text-2xl font-black">Markdown Report</h2>
-                <button className={`inline-flex items-center gap-2 rounded-full px-5 py-3 text-sm font-bold transition active:scale-95 ${
-                    copyState === 'copied'
-                      ? 'bg-emerald-300 text-emerald-950'
-                      : 'bg-white text-slate-950 hover:bg-slate-100'
-                  }`} onClick={handleCopyReport} type="button">
-                  {copyState === 'copied' ? <CheckCircle2 className="h-4 w-4" /> : <Clipboard className="h-4 w-4" />}
-                  {copyState === 'copied' ? 'Copied!' : 'Copy Report'}
-                </button>
-              </div>
-              <pre className="mt-6 max-h-96 overflow-auto whitespace-pre-wrap rounded-2xl bg-slate-900 p-5 text-sm leading-7 text-slate-100">{analysis.markdownReport}</pre>
-              {copyState === 'copied' ? <p className="mt-4 text-sm font-semibold text-emerald-300">Report copied to clipboard.</p> : null}
-              {copyState === 'failed' ? <p className="mt-4 text-sm font-semibold text-red-300">Clipboard copy failed. Please copy manually.</p> : null}
-            </section>
+            <button className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-6 py-4 text-sm font-black text-white disabled:opacity-60" disabled={Boolean(loading)} onClick={mode === 'github' ? analyzePr : analyzeDiff} type="button">
+              {loading && loading !== 'Loading Demo...' ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {loading && loading !== 'Loading Demo...' ? loading : mode === 'github' ? 'Analyze PR' : 'Analyze Raw Diff'}
+            </button>
           </div>
-        )}
+
+          {error ? <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div> : null}
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-6xl pb-16" id="results" ref={resultsRef}>
+        {analysis ? <Results analysis={analysis} copyReport={copyReport} copyStatus={copyStatus} /> : <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center text-slate-600">Run an analysis or click Try Demo to load results.</div>}
       </section>
     </main>
   );
 }
 
-function Metric({ label, value, tone = 'bg-slate-50 text-slate-950' }: { label: string; value: string; tone?: string }) {
-  return (
-    <div className={`rounded-2xl p-4 ${tone}`}>
-      <p className="text-sm text-slate-500">{label}</p>
-      <p className="text-2xl font-black">{value}</p>
-    </div>
-  );
+function Input({ label, onChange, placeholder, type = 'text', value }: { label: string; onChange: (value: string) => void; placeholder?: string; type?: string; value: string }) {
+  return <label className="block"><span className="mb-2 block text-sm font-bold text-slate-700">{label}</span><input className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-400" onChange={(event) => onChange(event.target.value)} placeholder={placeholder} type={type} value={value} /></label>;
+}
+
+function TextArea({ label, monospace = false, onChange, placeholder, rows = 4, value }: { label: string; monospace?: boolean; onChange: (value: string) => void; placeholder?: string; rows?: number; value: string }) {
+  return <label className="block"><span className="mb-2 block text-sm font-bold text-slate-700">{label}</span><textarea className={`w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-400 ${monospace ? 'font-mono' : ''}`} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} rows={rows} value={value} /></label>;
+}
+
+function Results({ analysis, copyReport, copyStatus }: { analysis: ReviewAnalysisResponse; copyReport: () => void; copyStatus: string }) {
+  return <div className="grid gap-6"><section className="grid gap-6 lg:grid-cols-2"><Card title="PR Overview"><h2 className="text-2xl font-black">{analysis.pullRequest.title}</h2><div className="mt-4 grid gap-2 text-sm text-slate-600 sm:grid-cols-2"><p>Author: {analysis.pullRequest.author}</p><p>State: {analysis.pullRequest.state}</p><p>Base: {analysis.pullRequest.baseBranch}</p><p>Head: {analysis.pullRequest.headBranch}</p><p>Files: {analysis.pullRequest.changedFiles}</p><p>Lines: +{analysis.pullRequest.additions} / -{analysis.pullRequest.deletions}</p></div></Card><Card title="Risk Assessment"><p className="text-5xl font-black">{analysis.riskAssessment.score}<span className="text-xl">/100</span></p><p className="mt-2 text-xl font-black">{analysis.riskAssessment.level}</p><ul className="mt-4 space-y-2 text-sm text-slate-600">{analysis.riskAssessment.reasons.map((reason) => <li key={reason}>- {reason}</li>)}</ul></Card></section><Card title="Change Summary"><p className="leading-8 text-slate-600">{analysis.changeSummary.overview}</p><ul className="mt-4 space-y-2 text-sm text-slate-600">{analysis.changeSummary.keyChanges.map((item) => <li key={item}>- {item}</li>)}</ul></Card><section className="grid gap-6 lg:grid-cols-2"><Card title="Changed Files"><div className="space-y-4">{analysis.files.map((file) => <div className="rounded-2xl bg-slate-50 p-4" key={file.filename}><p className="break-all font-bold">{file.filename}</p><p className="mt-1 text-sm text-slate-500">{file.status} · +{file.additions} / -{file.deletions}</p><div className="mt-3 flex flex-wrap gap-2">{file.riskTags.map((tag) => <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-600" key={tag}>{tag}</span>)}</div></div>)}</div></Card><Card title="Review Findings"><div className="space-y-4">{analysis.findings.length === 0 ? <p className="text-slate-600">No AI findings returned. Rule-based analysis is still available.</p> : analysis.findings.map((finding) => <article className="rounded-2xl border border-slate-200 p-4" key={`${finding.file}-${finding.title}`}><div className="flex gap-2"><span className="rounded-full bg-red-100 px-3 py-1 text-xs font-bold text-red-700">{finding.severity}</span><span className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-bold text-indigo-700">{finding.category}</span></div><h3 className="mt-3 font-black">{finding.title}</h3><p className="mt-1 break-all text-sm font-semibold text-slate-500">{finding.line ? `${finding.file}:${finding.line}` : finding.file}</p><p className="mt-3 text-sm leading-6 text-slate-600">{finding.description}</p><p className="mt-3 rounded-xl bg-slate-50 p-3 text-sm text-slate-700"><b>Suggestion:</b> {finding.suggestion}</p></article>)}</div></Card></section><section className="rounded-3xl bg-slate-950 p-6 text-white"><div className="flex items-center justify-between gap-4"><h2 className="text-2xl font-black">Markdown Report</h2><button className="rounded-full bg-white px-5 py-3 text-sm font-bold text-slate-950" onClick={copyReport} type="button">{copyStatus || 'Copy Report'}</button></div><pre className="mt-6 max-h-96 overflow-auto whitespace-pre-wrap rounded-2xl bg-slate-900 p-5 text-sm leading-7">{analysis.markdownReport}</pre></section></div>;
+}
+
+function Card({ children, title }: { children: React.ReactNode; title: string }) {
+  return <section className="rounded-3xl bg-white p-6 shadow-lg"><p className="mb-4 text-sm font-bold uppercase tracking-[0.16em] text-slate-400">{title}</p>{children}</section>;
 }
