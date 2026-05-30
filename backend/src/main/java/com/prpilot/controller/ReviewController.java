@@ -1,6 +1,7 @@
 package com.prpilot.controller;
 
 import com.prpilot.dto.AnalyzeDiffRequest;
+import com.prpilot.dto.AnalyzePullRequestRequest;
 import com.prpilot.dto.FetchPullRequestRequest;
 import com.prpilot.dto.GitHubPullRequestFetchResponse;
 import com.prpilot.dto.ReviewAnalysisResponse;
@@ -45,5 +46,10 @@ public class ReviewController {
     @PostMapping("/analyze-diff")
     public ReviewAnalysisResponse analyzeDiff(@Valid @RequestBody AnalyzeDiffRequest request) {
         return reviewAnalysisService.analyzeDiff(request);
+    }
+
+    @PostMapping("/analyze-pr")
+    public ReviewAnalysisResponse analyzePullRequest(@Valid @RequestBody AnalyzePullRequestRequest request) {
+        return reviewAnalysisService.analyzePullRequest(request);
     }
 }
