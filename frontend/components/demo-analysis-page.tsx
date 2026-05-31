@@ -31,6 +31,7 @@ export default function DemoAnalysisPage() {
   const [error, setError] = useState('');
   const [copyStatus, setCopyStatus] = useState('');
   const [streamEvents, setStreamEvents] = useState<ReviewAnalysisStreamEvent[]>([]);
+  const streamEventDelayRef = useRef(Promise.resolve());
   const [activeStreamStages, setActiveStreamStages] = useState<AnalysisStreamStage[]>([]);
   const [activeSection, setActiveSection] = useState<'analyze' | 'results'>('analyze');
   const [language, setLanguage] = useState<Language>('zh');
@@ -84,7 +85,17 @@ export default function DemoAnalysisPage() {
     }
   }
 
-  async function runStream(label: string, stages: AnalysisStreamStage[], action: (onEvent: (event: ReviewAnalysisStreamEvent) => void) => Promise<ReviewAnalysisResponse>) {
+  async function appendStreamEvent(event: ReviewAnalysisStreamEvent) {
+    streamEventDelayRef.current = streamEventDelayRef.current.then(async () => {
+      setStreamEvents((current) => [...current, event]);
+      if (event.status === 'progress') {
+        await delay(400);
+      }
+    });
+    await streamEventDelayRef.current;
+  }
+
+  async function runStream(label: string, stages: AnalysisStreamStage[], action: (onEvent: (event: ReviewAnalysisStreamEvent) => void | Promise<void>) => Promise<ReviewAnalysisResponse>) {
     setLoading(label);
     setError('');
     setCopyStatus('');
@@ -92,7 +103,8 @@ export default function DemoAnalysisPage() {
     setActiveStreamStages(stages);
     setStreamEvents([]);
     try {
-      const result = await action((event) => setStreamEvents((current) => [...current, event]));
+      streamEventDelayRef.current = Promise.resolve();
+      const result = await action(appendStreamEvent);
       setAnalysis(result);
       setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
     } catch (caught) {
@@ -264,6 +276,24 @@ function Results({ analysis, copyReport, copyStatus, focusAreas, language }: { a
   const selectedFocusLabels = focusAreas.map((area) => focusAreaLabels[language][area]).join(isZh ? '、' : ', ');
   const displayMarkdownReport = buildDisplayMarkdownReport(analysis, language);
   const [selectedFile, setSelectedFile] = useState<FileChange | null>(null);
+  const [selectedFinding, setSelectedFinding] = useState<ReviewFinding | null>(null);
+
+  function openFileDiff(file: FileChange, finding: ReviewFinding | null = null) {
+    setSelectedFile(file);
+    setSelectedFinding(finding);
+  }
+
+  function openFindingDiff(finding: ReviewFinding) {
+    const matchedFile = findFileForFinding(analysis.files, finding);
+    if (matchedFile) {
+      openFileDiff(matchedFile, finding);
+    }
+  }
+
+  function closeDiffModal() {
+    setSelectedFile(null);
+    setSelectedFinding(null);
+  }
 
   return (
     <div className="grid gap-6">
@@ -306,13 +336,16 @@ function Results({ analysis, copyReport, copyStatus, focusAreas, language }: { a
       <section className="grid gap-6 lg:grid-cols-2">
         <Card title={isZh ? '变更文件' : 'Changed Files'}>
           <div className="max-h-[28rem] space-y-4 overflow-y-auto overscroll-contain pr-2 [scrollbar-gutter:stable]">
-            {analysis.files.map((file) => <button className="w-full rounded-2xl border border-slate-100 bg-slate-50 p-4 text-left transition hover:-translate-y-0.5 hover:bg-white hover:shadow-lg focus:outline-none focus:ring-4 focus:ring-indigo-100" key={file.filename} onClick={() => setSelectedFile(file)} type="button"><p className="break-all font-bold">{file.filename}</p><p className="mt-1 text-sm text-slate-500">{file.status} · +{file.additions} / -{file.deletions}</p><div className="mt-3 flex flex-wrap gap-2">{file.riskTags.map((tag) => <span className="rounded-full border border-indigo-100 bg-white px-3 py-1 text-xs font-bold text-indigo-700" key={tag}>{labelRiskTag(tag, language)}</span>)}</div><p className="mt-3 text-xs font-bold text-indigo-600">{isZh ? '点击查看 Diff 预览' : 'Click to preview diff'}</p></button>)}
+            {analysis.files.map((file) => <button className="w-full rounded-2xl border border-slate-100 bg-slate-50 p-4 text-left transition hover:-translate-y-0.5 hover:bg-white hover:shadow-lg focus:outline-none focus:ring-4 focus:ring-indigo-100" key={file.filename} onClick={() => openFileDiff(file)} type="button"><p className="break-all font-bold">{file.filename}</p><p className="mt-1 text-sm text-slate-500">{file.status} · +{file.additions} / -{file.deletions}</p><div className="mt-3 flex flex-wrap gap-2">{file.riskTags.map((tag) => <span className="rounded-full border border-indigo-100 bg-white px-3 py-1 text-xs font-bold text-indigo-700" key={tag}>{labelRiskTag(tag, language)}</span>)}</div><p className="mt-3 text-xs font-bold text-indigo-600">{isZh ? '点击查看 Diff 预览' : 'Click to preview diff'}</p></button>)}
           </div>
         </Card>
 
         <Card title={isZh ? 'Review 建议' : 'Review Findings'}>
           <div className="max-h-[28rem] space-y-4 overflow-y-auto overscroll-contain pr-2 [scrollbar-gutter:stable]">
-            {filteredFindings.length === 0 ? <p className="rounded-2xl bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">{selectedFocusLabels ? (isZh ? `当前关注方向（${selectedFocusLabels}）下没有发现对应的 Review 建议。` : `No review findings matched the selected focus areas (${selectedFocusLabels}).`) : (isZh ? '未选择关注方向。请选择至少一个方向后查看对应建议。' : 'No focus area selected. Select at least one focus area to view matching findings.')}</p> : filteredFindings.map((finding) => <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-xl" key={`${finding.file}-${finding.title}`}><div className="border-b border-slate-100 bg-slate-50 px-4 py-3"><span className={`rounded-full border px-3 py-1 text-xs font-bold ${severityClass(finding.severity)}`}>{labelRiskLevel(finding.severity, language)}</span><span className="ml-2 rounded-full bg-indigo-50 px-3 py-1 text-xs font-bold text-indigo-700">{labelCategory(finding.category, language)}</span></div><div className="p-4"><h3 className="font-black">{localizedFindingText(finding, 'title', language)}</h3><p className="mt-1 break-all font-mono text-xs font-semibold text-slate-500">{finding.line ? `${finding.file}:${finding.line}` : finding.file}</p><p className="mt-3 text-sm leading-6 text-slate-600">{localizedFindingText(finding, 'description', language)}</p><p className="mt-3 rounded-xl bg-slate-50 p-3 text-sm text-slate-700"><b>{isZh ? '建议' : 'Suggestion'}:</b> {localizedFindingText(finding, 'suggestion', language)}</p></div></article>)}
+            {filteredFindings.length === 0 ? <p className="rounded-2xl bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">{selectedFocusLabels ? (isZh ? `当前没有匹配${selectedFocusLabels}方向的 Review 建议。` : `No review findings matched the selected focus areas (${selectedFocusLabels}).`) : (isZh ? '当前未选择关注方向，请至少选择一个方向查看 Review 建议。' : 'No focus area selected. Select at least one focus area to view matching findings.')}</p> : filteredFindings.map((finding) => {
+              const matchedFile = findFileForFinding(analysis.files, finding);
+              return <button className="w-full overflow-hidden rounded-2xl border border-slate-200 bg-white text-left shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-xl focus:outline-none focus:ring-4 focus:ring-indigo-100 disabled:cursor-not-allowed disabled:opacity-70" disabled={!matchedFile} key={`${finding.file}-${finding.title}`} onClick={() => openFindingDiff(finding)} type="button"><div className="border-b border-slate-100 bg-slate-50 px-4 py-3"><span className={`rounded-full border px-3 py-1 text-xs font-bold ${severityClass(finding.severity)}`}>{labelRiskLevel(finding.severity, language)}</span><span className="ml-2 rounded-full bg-indigo-50 px-3 py-1 text-xs font-bold text-indigo-700">{labelCategory(finding.category, language)}</span></div><div className="p-4"><h3 className="font-black">{localizedFindingText(finding, 'title', language)}</h3><p className="mt-1 break-all font-mono text-xs font-semibold text-slate-500">{finding.line ? `${finding.file}:${finding.line}` : finding.file}</p><p className="mt-3 text-sm leading-6 text-slate-600">{localizedFindingText(finding, 'description', language)}</p><p className="mt-3 rounded-xl bg-slate-50 p-3 text-sm text-slate-700"><b>{isZh ? '建议' : 'Suggestion'}:</b> {localizedFindingText(finding, 'suggestion', language)}</p><p className="mt-3 text-xs font-black text-indigo-600">{matchedFile ? (isZh ? '点击查看相关 Diff' : 'Click to open related diff') : (isZh ? '未找到相关 Diff' : 'No matching file diff found')}</p></div></button>;
+            })}
           </div>
         </Card>
       </section>
@@ -324,14 +357,15 @@ function Results({ analysis, copyReport, copyStatus, focusAreas, language }: { a
         </div>
         <pre className="mt-6 max-h-96 overflow-auto whitespace-pre-wrap rounded-2xl border border-slate-800 bg-slate-900 p-5 text-sm leading-7">{displayMarkdownReport}</pre>
       </section>
-      {selectedFile ? <FileDiffModal file={selectedFile} language={language} onClose={() => setSelectedFile(null)} /> : null}
+      {selectedFile ? <FileDiffModal file={selectedFile} finding={selectedFinding} language={language} onClose={closeDiffModal} /> : null}
     </div>
   );
 }
 
-function FileDiffModal({ file, language, onClose }: { file: FileChange; language: Language; onClose: () => void }) {
+function FileDiffModal({ file, finding, language, onClose }: { file: FileChange; finding: ReviewFinding | null; language: Language; onClose: () => void }) {
   const isZh = language === 'zh';
   const lines = file.patch ? file.patch.split('\n') : [];
+  const targetLineIndex = findDiffLineIndex(lines, finding?.line ?? null);
   const visibleLines = lines.slice(0, 400);
   const isTruncated = lines.length > visibleLines.length;
 
@@ -348,12 +382,13 @@ function FileDiffModal({ file, language, onClose }: { file: FileChange; language
             <button className="rounded-full bg-slate-950 px-5 py-2 text-sm font-black text-white transition hover:bg-indigo-700" onClick={onClose} type="button">{isZh ? '关闭' : 'Close'}</button>
           </div>
           {file.riskTags.length ? <div className="mt-4 flex flex-wrap gap-2">{file.riskTags.map((tag) => <span className="rounded-full border border-indigo-100 bg-white px-3 py-1 text-xs font-bold text-indigo-700" key={tag}>{labelRiskTag(tag, language)}</span>)}</div> : null}
+          {finding ? <div className="mt-4 rounded-2xl border border-indigo-100 bg-white p-4 text-sm text-slate-700"><p className="text-xs font-black uppercase tracking-[0.16em] text-indigo-600">{isZh ? '来源 Review 建议' : 'Source review finding'}</p><p className="mt-2 font-black text-slate-950">{localizedFindingText(finding, 'title', language)}</p><p className="mt-1 break-all font-mono text-xs font-semibold text-slate-500">{finding.line ? `${finding.file}:${finding.line}` : finding.file}</p><p className="mt-2 leading-6">{localizedFindingText(finding, 'description', language)}</p></div> : null}
         </div>
 
         <div className="overflow-y-auto bg-slate-950 p-4 [scrollbar-gutter:stable]">
           {visibleLines.length ? (
             <pre className="min-w-full overflow-x-auto rounded-2xl border border-slate-800 bg-slate-900 py-3 text-xs leading-6 text-slate-200">
-              {visibleLines.map((line, index) => <DiffLine key={`${index}-${line}`} line={line} />)}
+              {visibleLines.map((line, index) => <DiffLine highlight={index === targetLineIndex} key={`${index}-${line}`} line={line} />)}
             </pre>
           ) : (
             <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6 text-sm leading-7 text-slate-300">
@@ -368,9 +403,9 @@ function FileDiffModal({ file, language, onClose }: { file: FileChange; language
   );
 }
 
-function DiffLine({ line }: { line: string }) {
+function DiffLine({ highlight, line }: { highlight?: boolean; line: string }) {
   const lineClass = diffLineClass(line);
-  return <code className={`block whitespace-pre px-4 font-mono ${lineClass}`}>{line || ' '}</code>;
+  return <code className={`block whitespace-pre px-4 font-mono [font-family:Consolas,'Cascadia_Mono','Microsoft_YaHei_Mono','Microsoft_YaHei','SimSun',monospace] ${highlight ? 'ring-2 ring-amber-300 bg-amber-400/20 text-amber-100' : lineClass}`}>{line || ' '}</code>;
 }
 
 function diffLineClass(line: string) {
@@ -478,6 +513,46 @@ function localizeStreamMessage(event: ReviewAnalysisStreamEvent, language: Langu
     error: event.message || '分析失败。',
   };
   return messages[event.stage] ?? event.message;
+}
+
+function findFileForFinding(files: FileChange[], finding: ReviewFinding) {
+  return files.find((file) => normalizePath(file.filename) === normalizePath(finding.file))
+    ?? files.find((file) => normalizePath(file.filename).endsWith(normalizePath(finding.file)) || normalizePath(finding.file).endsWith(normalizePath(file.filename)))
+    ?? null;
+}
+
+function normalizePath(value: string) {
+  return value.replace(/^\/?[ab]\//, '').replace(/\\/g, '/').toLowerCase();
+}
+
+function findDiffLineIndex(lines: string[], targetLine: number | null) {
+  if (!targetLine) return -1;
+  let newLineNumber = 0;
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const hunkMatch = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(line);
+    if (hunkMatch) {
+      newLineNumber = Number(hunkMatch[1]);
+      continue;
+    }
+    if (line.startsWith('-') && !line.startsWith('---')) {
+      continue;
+    }
+    if (line.startsWith('+') && !line.startsWith('+++')) {
+      if (newLineNumber === targetLine) return index;
+      newLineNumber += 1;
+      continue;
+    }
+    if (!line.startsWith('diff --git') && !line.startsWith('index ') && !line.startsWith('---') && !line.startsWith('+++')) {
+      if (newLineNumber === targetLine) return index;
+      newLineNumber += 1;
+    }
+  }
+  return -1;
+}
+
+function delay(milliseconds: number) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
 function localizedFindingText(finding: ReviewFinding, field: 'title' | 'description' | 'suggestion', language: Language) {

@@ -58,7 +58,7 @@ public class ReviewController {
         return reviewAnalysisService.analyzePullRequest(request);
     }
 
-    @PostMapping(path = "/analyze-diff-stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @PostMapping(path = "/analyze-diff-stream", produces = "text/event-stream;charset=UTF-8")
     public SseEmitter analyzeDiffStream(@Valid @RequestBody AnalyzeDiffRequest request) {
         SseEmitter emitter = new SseEmitter(180_000L);
         CompletableFuture.runAsync(() -> {
@@ -73,7 +73,7 @@ public class ReviewController {
         return emitter;
     }
 
-    @PostMapping(path = "/analyze-pr-stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @PostMapping(path = "/analyze-pr-stream", produces = "text/event-stream;charset=UTF-8")
     public SseEmitter analyzePullRequestStream(@Valid @RequestBody AnalyzePullRequestRequest request) {
         SseEmitter emitter = new SseEmitter(180_000L);
         CompletableFuture.runAsync(() -> {
