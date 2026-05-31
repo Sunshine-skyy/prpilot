@@ -249,13 +249,13 @@ function Results({ analysis, copyReport, copyStatus, focusAreas, language }: { a
 
       <section className="grid gap-6 lg:grid-cols-2">
         <Card title={isZh ? '变更文件' : 'Changed Files'}>
-          <div className="space-y-4">
+          <div className="max-h-[28rem] space-y-4 overflow-y-auto overscroll-contain pr-2 [scrollbar-gutter:stable]">
             {analysis.files.map((file) => <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 transition hover:-translate-y-0.5 hover:bg-white hover:shadow-lg" key={file.filename}><p className="break-all font-bold">{file.filename}</p><p className="mt-1 text-sm text-slate-500">{file.status} · +{file.additions} / -{file.deletions}</p><div className="mt-3 flex flex-wrap gap-2">{file.riskTags.map((tag) => <span className="rounded-full border border-indigo-100 bg-white px-3 py-1 text-xs font-bold text-indigo-700" key={tag}>{labelRiskTag(tag, language)}</span>)}</div></div>)}
           </div>
         </Card>
 
         <Card title={isZh ? 'Review 建议' : 'Review Findings'}>
-          <div className="space-y-4">
+          <div className="max-h-[28rem] space-y-4 overflow-y-auto overscroll-contain pr-2 [scrollbar-gutter:stable]">
             {filteredFindings.length === 0 ? <p className="rounded-2xl bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">{selectedFocusLabels ? (isZh ? `当前关注方向（${selectedFocusLabels}）下没有发现对应的 Review 建议。` : `No review findings matched the selected focus areas (${selectedFocusLabels}).`) : (isZh ? '未选择关注方向。请选择至少一个方向后查看对应建议。' : 'No focus area selected. Select at least one focus area to view matching findings.')}</p> : filteredFindings.map((finding) => <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-xl" key={`${finding.file}-${finding.title}`}><div className="border-b border-slate-100 bg-slate-50 px-4 py-3"><span className={`rounded-full border px-3 py-1 text-xs font-bold ${severityClass(finding.severity)}`}>{labelRiskLevel(finding.severity, language)}</span><span className="ml-2 rounded-full bg-indigo-50 px-3 py-1 text-xs font-bold text-indigo-700">{labelCategory(finding.category, language)}</span></div><div className="p-4"><h3 className="font-black">{localizedFindingText(finding, 'title', language)}</h3><p className="mt-1 break-all font-mono text-xs font-semibold text-slate-500">{finding.line ? `${finding.file}:${finding.line}` : finding.file}</p><p className="mt-3 text-sm leading-6 text-slate-600">{localizedFindingText(finding, 'description', language)}</p><p className="mt-3 rounded-xl bg-slate-50 p-3 text-sm text-slate-700"><b>{isZh ? '建议' : 'Suggestion'}:</b> {localizedFindingText(finding, 'suggestion', language)}</p></div></article>)}
           </div>
         </Card>
