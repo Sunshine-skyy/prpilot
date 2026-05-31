@@ -13,11 +13,15 @@ import com.prpilot.rule.RiskRuleEngine;
 import com.prpilot.rule.RiskRuleResult;
 import com.prpilot.util.DiffParser;
 import java.util.List;
+import java.util.function.BiConsumer;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 @Service
 public class ReviewAnalysisService {
+
+    private static final BiConsumer<String, String> NOOP_PROGRESS = (stage, message) -> {
+    };
 
     private final DiffParser diffParser;
     private final RiskRuleEngine riskRuleEngine;
@@ -46,22 +50,34 @@ public class ReviewAnalysisService {
     }
 
     public ReviewAnalysisResponse analyzeDiff(AnalyzeDiffRequest request) {
+        return analyzeDiff(request, NOOP_PROGRESS);
+    }
+
+    public ReviewAnalysisResponse analyzeDiff(AnalyzeDiffRequest request, BiConsumer<String, String> progressSink) {
+        progressSink.accept("parsing_diff", "Parsing raw diff input.");
         List<FileChange> parsedFiles = diffParser.parse(request.diff());
         PullRequestInfo pullRequest = buildRawDiffPullRequestInfo(request, parsedFiles);
-        return analyzeFiles(pullRequest, parsedFiles, request.description(), request.focusAreas(), request.language());
+        return analyzeFiles(pullRequest, parsedFiles, request.description(), request.focusAreas(), request.language(), progressSink);
     }
 
     public ReviewAnalysisResponse analyzePullRequest(AnalyzePullRequestRequest request) {
+        return analyzePullRequest(request, NOOP_PROGRESS);
+    }
+
+    public ReviewAnalysisResponse analyzePullRequest(AnalyzePullRequestRequest request, BiConsumer<String, String> progressSink) {
+        progressSink.accept("fetching_pr", "Fetching pull request metadata and changed files from GitHub.");
         GitHubPullRequestFetchResponse fetchedPullRequest = gitHubPullRequestService.fetchPullRequest(
                 request.prUrl(),
                 request.githubToken()
         );
+        progressSink.accept("parsing_diff", "Preparing changed files for analysis.");
         return analyzeFiles(
                 fetchedPullRequest.pullRequest(),
                 fetchedPullRequest.files(),
                 null,
                 request.focusAreas(),
-                request.language()
+                request.language(),
+                progressSink
         );
     }
 
@@ -70,11 +86,16 @@ public class ReviewAnalysisService {
             List<FileChange> files,
             String description,
             List<String> focusAreas,
-            String language
+            String language,
+            BiConsumer<String, String> progressSink
     ) {
         String normalizedLanguage = normalizeLanguage(language);
+        progressSink.accept("running_rules", "Running deterministic risk rules against changed files.");
         RiskRuleResult riskRuleResult = riskRuleEngine.analyze(pullRequest, files);
         ChangeSummary changeSummary = buildChangeSummary(description, riskRuleResult.files());
+        progressSink.accept("calling_llm", llmClient.isAvailable()
+                ? "Calling the configured LLM for review findings."
+                : "LLM is not configured; skipping AI review findings.");
         List<ReviewFinding> findings = generateFindings(
                 pullRequest,
                 changeSummary,
@@ -82,6 +103,7 @@ public class ReviewAnalysisService {
                 focusAreas,
                 normalizedLanguage
         );
+        progressSink.accept("generating_report", "Generating the Markdown review report.");
         String markdownReport = markdownReportGenerator.generate(
                 pullRequest,
                 changeSummary,

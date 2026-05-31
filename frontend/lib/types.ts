@@ -63,6 +63,17 @@ export type ReviewAnalysisResponse = {
   markdownReport: string;
 };
 
+export type AnalysisStreamStage = 'fetching_pr' | 'parsing_diff' | 'running_rules' | 'calling_llm' | 'generating_report' | 'completed' | 'error';
+
+export type AnalysisStreamStatus = 'progress' | 'completed' | 'error';
+
+export type ReviewAnalysisStreamEvent = {
+  stage: AnalysisStreamStage | string;
+  status: AnalysisStreamStatus | string;
+  message: string;
+  result: ReviewAnalysisResponse | null;
+};
+
 export type FocusArea = 'security' | 'bug-risk' | 'performance' | 'maintainability' | 'testing';
 
 export type AnalyzePullRequestRequest = {

@@ -3,9 +3,9 @@
 import Link from 'next/link';
 import { CheckCircle2, Copy, Github, Loader2, Sparkles, TerminalSquare } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { analyzePullRequest, analyzeRawDiff, fetchDemoReview } from '@/lib/api';
+import { fetchDemoReview, streamPullRequestAnalysis, streamRawDiffAnalysis } from '@/lib/api';
 import { focusAreaLabels, isLanguage, labelCategory, labelFindingText, labelRiskLevel, labelRiskReason, labelRiskTag, languageNames, languageStorageKey, type Language } from '@/lib/i18n';
-import type { FileChange, FocusArea, ReviewAnalysisResponse, ReviewFinding } from '@/lib/types';
+import type { AnalysisStreamStage, FileChange, FocusArea, ReviewAnalysisResponse, ReviewAnalysisStreamEvent, ReviewFinding } from '@/lib/types';
 
 const focusOptions: { value: FocusArea; label: string }[] = [
   { value: 'security', label: 'Security' },
@@ -14,6 +14,9 @@ const focusOptions: { value: FocusArea; label: string }[] = [
   { value: 'maintainability', label: 'Maintainability' },
   { value: 'testing', label: 'Testing' },
 ];
+
+const analysisStageOrder: AnalysisStreamStage[] = ['fetching_pr', 'parsing_diff', 'running_rules', 'calling_llm', 'generating_report', 'completed'];
+const rawDiffStageOrder: AnalysisStreamStage[] = ['parsing_diff', 'running_rules', 'calling_llm', 'generating_report', 'completed'];
 
 export default function DemoAnalysisPage() {
   const [analysis, setAnalysis] = useState<ReviewAnalysisResponse | null>(null);
@@ -27,6 +30,8 @@ export default function DemoAnalysisPage() {
   const [loading, setLoading] = useState('');
   const [error, setError] = useState('');
   const [copyStatus, setCopyStatus] = useState('');
+  const [streamEvents, setStreamEvents] = useState<ReviewAnalysisStreamEvent[]>([]);
+  const [activeStreamStages, setActiveStreamStages] = useState<AnalysisStreamStage[]>([]);
   const [activeSection, setActiveSection] = useState<'analyze' | 'results'>('analyze');
   const [language, setLanguage] = useState<Language>('zh');
   const resultsRef = useRef<HTMLElement | null>(null);
@@ -67,8 +72,28 @@ export default function DemoAnalysisPage() {
     setLoading(label);
     setError('');
     setCopyStatus('');
+    setStreamEvents([]);
+    setActiveStreamStages([]);
     try {
       setAnalysis(await action());
+      setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+    } catch (caught) {
+      setError(`${caught instanceof Error ? caught.message : 'Unknown error'}. ${isZh ? '请确认后端服务正在运行。' : 'Please make sure the backend is running.'}`);
+    } finally {
+      setLoading('');
+    }
+  }
+
+  async function runStream(label: string, stages: AnalysisStreamStage[], action: (onEvent: (event: ReviewAnalysisStreamEvent) => void) => Promise<ReviewAnalysisResponse>) {
+    setLoading(label);
+    setError('');
+    setCopyStatus('');
+    setAnalysis(null);
+    setActiveStreamStages(stages);
+    setStreamEvents([]);
+    try {
+      const result = await action((event) => setStreamEvents((current) => [...current, event]));
+      setAnalysis(result);
       setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
     } catch (caught) {
       setError(`${caught instanceof Error ? caught.message : 'Unknown error'}. ${isZh ? '请确认后端服务正在运行。' : 'Please make sure the backend is running.'}`);
@@ -89,7 +114,7 @@ export default function DemoAnalysisPage() {
       setError(isZh ? '请输入 GitHub Pull Request URL。' : 'Please enter a GitHub pull request URL.');
       return;
     }
-    void run(isZh ? '正在分析 PR...' : 'Analyzing PR...', () => analyzePullRequest({ prUrl, githubToken, focusAreas, language }));
+    void runStream(isZh ? '正在分析 PR...' : 'Analyzing PR...', analysisStageOrder, (onEvent) => streamPullRequestAnalysis({ prUrl, githubToken, focusAreas, language }, onEvent));
   }
 
   function analyzeDiff() {
@@ -97,7 +122,7 @@ export default function DemoAnalysisPage() {
       setError(isZh ? '请粘贴 Raw Diff。' : 'Please paste a raw diff.');
       return;
     }
-    void run(isZh ? '正在分析 Raw Diff...' : 'Analyzing Raw Diff...', () => analyzeRawDiff({ title: rawTitle, description: rawDescription, diff: rawDiff, focusAreas, language }));
+    void runStream(isZh ? '正在分析 Raw Diff...' : 'Analyzing Raw Diff...', rawDiffStageOrder, (onEvent) => streamRawDiffAnalysis({ title: rawTitle, description: rawDescription, diff: rawDiff, focusAreas, language }, onEvent));
   }
 
   async function copyReport() {
@@ -174,6 +199,7 @@ export default function DemoAnalysisPage() {
             </button>
           </div>
 
+          {loading && activeStreamStages.length ? <AnalysisProgress events={streamEvents} language={language} stages={activeStreamStages} /> : null}
           {error ? <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div> : null}
         </div>
       </section>
@@ -185,6 +211,34 @@ export default function DemoAnalysisPage() {
   );
 }
 
+function AnalysisProgress({ events, language, stages }: { events: ReviewAnalysisStreamEvent[]; language: Language; stages: AnalysisStreamStage[] }) {
+  const latestEvent = events.at(-1);
+  const latestStageIndex = latestEvent ? stages.indexOf(latestEvent.stage as AnalysisStreamStage) : -1;
+
+  return (
+    <div className="mt-5 rounded-3xl border border-indigo-100 bg-indigo-50/70 p-4">
+      <div className="flex items-center gap-2 text-sm font-black text-indigo-700">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        {language === 'zh' ? '实时分析进度' : 'Live analysis progress'}
+      </div>
+      <div className="mt-4 space-y-3">
+        {stages.map((stage, index) => {
+          const isCompleted = latestStageIndex > index;
+          const isActive = latestEvent?.stage === stage && latestEvent.status === 'progress';
+          return (
+            <div className="flex items-center gap-3 text-sm" key={stage}>
+              <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border ${isCompleted ? 'border-emerald-200 bg-emerald-500 text-white' : isActive ? 'border-indigo-200 bg-white text-indigo-600' : 'border-slate-200 bg-white text-slate-300'}`}>
+                {isCompleted ? <CheckCircle2 className="h-4 w-4" /> : isActive ? <Loader2 className="h-4 w-4 animate-spin" /> : <span className="h-2 w-2 rounded-full bg-current" />}
+              </span>
+              <span className={`font-bold ${isCompleted || isActive ? 'text-slate-800' : 'text-slate-400'}`}>{labelAnalysisStage(stage, language)}</span>
+            </div>
+          );
+        })}
+      </div>
+      {latestEvent?.message ? <p className="mt-4 rounded-2xl bg-white/80 p-3 text-xs font-semibold text-slate-600">{localizeStreamMessage(latestEvent, language)}</p> : null}
+    </div>
+  );
+}
 function Input({ icon, label, onChange, placeholder, type = 'text', value }: { icon?: ReactNode; label: string; onChange: (value: string) => void; placeholder?: string; type?: string; value: string }) {
   return <label className="block"><span className="mb-2 block text-sm font-black text-slate-700">{label}</span><span className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm focus-within:border-indigo-400 focus-within:ring-4 focus-within:ring-indigo-50">{icon ? <span className="text-slate-400">{icon}</span> : null}<input className="w-full bg-transparent text-sm outline-none placeholder:text-slate-400" onChange={(event) => onChange(event.target.value)} placeholder={placeholder} type={type} value={value} /></span></label>;
 }
@@ -398,6 +452,32 @@ function buildChineseMarkdownReport(analysis: ReviewAnalysisResponse) {
     ...(riskAssessment.reasons.length ? ['- 合并前优先检查带风险标签的文件。', '- 针对高风险行为补充或更新测试。', '- 结合 LLM 生成的 Review 建议做进一步代码审查。'] : ['- 继续进行常规人工 Review。']),
   ];
   return `${lines.join('\n')}\n`;
+}
+
+function labelAnalysisStage(stage: string, language: Language) {
+  const labels: Record<string, { zh: string; en: string }> = {
+    fetching_pr: { zh: '拉取 GitHub PR 信息', en: 'Fetch GitHub PR data' },
+    parsing_diff: { zh: '解析代码变更 Diff', en: 'Parse changed files' },
+    running_rules: { zh: '执行规则风险分析', en: 'Run risk rules' },
+    calling_llm: { zh: '调用 LLM 生成 Review 建议', en: 'Generate AI review findings' },
+    generating_report: { zh: '生成 Markdown 报告', en: 'Generate Markdown report' },
+    completed: { zh: '分析完成', en: 'Analysis completed' },
+  };
+  return labels[stage]?.[language] ?? stage;
+}
+
+function localizeStreamMessage(event: ReviewAnalysisStreamEvent, language: Language) {
+  if (language === 'en') return event.message;
+  const messages: Record<string, string> = {
+    fetching_pr: '正在从 GitHub 拉取 PR 元信息和变更文件。',
+    parsing_diff: '正在解析 Diff，并准备待分析的变更文件。',
+    running_rules: '正在运行确定性的风险规则，识别高风险文件和信号。',
+    calling_llm: event.message.includes('not configured') ? '当前未配置 LLM，已跳过 AI Review 建议生成。' : '正在调用已配置的 LLM 生成 Review 建议。',
+    generating_report: '正在生成可复制的 Markdown Review 报告。',
+    completed: '分析完成，正在展示结构化结果。',
+    error: event.message || '分析失败。',
+  };
+  return messages[event.stage] ?? event.message;
 }
 
 function localizedFindingText(finding: ReviewFinding, field: 'title' | 'description' | 'suggestion', language: Language) {
