@@ -14,6 +14,7 @@ const focusOptions: { value: FocusArea; label: string }[] = [
   { value: 'maintainability', label: 'Maintainability' },
   { value: 'testing', label: 'Testing' },
 ];
+const allFocusAreas = focusOptions.map((option) => option.value);
 
 const analysisStageOrder: AnalysisStreamStage[] = ['fetching_pr', 'parsing_diff', 'running_rules', 'calling_llm', 'generating_report', 'completed'];
 const rawDiffStageOrder: AnalysisStreamStage[] = ['parsing_diff', 'running_rules', 'calling_llm', 'generating_report', 'completed'];
@@ -26,7 +27,7 @@ export default function DemoAnalysisPage() {
   const [rawTitle, setRawTitle] = useState('Improve auth middleware');
   const [rawDescription, setRawDescription] = useState('This patch updates authentication behavior.');
   const [rawDiff, setRawDiff] = useState('');
-  const [focusAreas, setFocusAreas] = useState<FocusArea[]>(['security', 'bug-risk', 'testing']);
+  const [focusAreas, setFocusAreas] = useState<FocusArea[]>(() => [...allFocusAreas]);
   const [loading, setLoading] = useState('');
   const [error, setError] = useState('');
   const [copyStatus, setCopyStatus] = useState('');
@@ -115,10 +116,13 @@ export default function DemoAnalysisPage() {
   }
 
   function toggleFocus(value: FocusArea) {
-    setFocusAreas((current) => {
-      if (current.length === 1 && current[0] === value) return [];
-      return [value];
-    });
+    setFocusAreas((current) => current.includes(value)
+      ? current.filter((area) => area !== value)
+      : allFocusAreas.filter((area) => area === value || current.includes(area)));
+  }
+
+  function toggleAllFocusAreas() {
+    setFocusAreas((current) => current.length === allFocusAreas.length ? [] : allFocusAreas);
   }
 
   function analyzePr() {
@@ -194,16 +198,7 @@ export default function DemoAnalysisPage() {
               </>
             )}
 
-            <div>
-              <p className="mb-3 text-sm font-black text-slate-700">{isZh ? '关注方向' : 'Focus Areas'}</p>
-              <div className="flex flex-wrap gap-2">
-                {focusOptions.map((option) => (
-                  <button className={`rounded-full border px-3 py-2 text-xs font-black transition hover:-translate-y-0.5 ${focusAreas.includes(option.value) ? 'border-indigo-600 bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'border-slate-200 bg-white text-slate-600 hover:border-indigo-200 hover:text-indigo-700'}`} key={option.value} onClick={() => toggleFocus(option.value)} type="button">
-                    {focusAreaLabels[language][option.value]}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <FocusAreaSelector analysis={analysis} focusAreas={focusAreas} language={language} onToggleAll={toggleAllFocusAreas} onToggleFocus={toggleFocus} />
 
             <button className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-indigo-600 to-slate-950 px-6 py-4 text-sm font-black text-white shadow-xl shadow-indigo-100 transition hover:-translate-y-0.5 disabled:opacity-60" disabled={Boolean(loading)} onClick={mode === 'github' ? analyzePr : analyzeDiff} type="button">
               {loading && loading !== (isZh ? '正在加载 Demo...' : 'Loading Demo...') ? <Loader2 className="h-4 w-4 animate-spin" /> : <TerminalSquare className="h-4 w-4" />}
@@ -255,6 +250,43 @@ function Input({ icon, label, onChange, placeholder, type = 'text', value }: { i
   return <label className="block"><span className="mb-2 block text-sm font-black text-slate-700">{label}</span><span className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm focus-within:border-indigo-400 focus-within:ring-4 focus-within:ring-indigo-50">{icon ? <span className="text-slate-400">{icon}</span> : null}<input className="w-full bg-transparent text-sm outline-none placeholder:text-slate-400" onChange={(event) => onChange(event.target.value)} placeholder={placeholder} type={type} value={value} /></span></label>;
 }
 
+function FocusAreaSelector({ analysis, focusAreas, language, onToggleAll, onToggleFocus }: { analysis: ReviewAnalysisResponse | null; focusAreas: FocusArea[]; language: Language; onToggleAll: () => void; onToggleFocus: (value: FocusArea) => void }) {
+  const isZh = language === 'zh';
+  const allSelected = focusAreas.length === allFocusAreas.length;
+  const findingCounts = getFocusAreaFindingCounts(analysis?.findings ?? []);
+  const totalFindings = analysis?.findings.length ?? 0;
+  const selectedCount = focusAreas.length;
+  const helperText = isZh
+    ? allSelected ? '已选择全部方向' : selectedCount ? `已选择 ${selectedCount} 个方向` : '未选择方向，结果列表将为空'
+    : allSelected ? 'All focus areas selected' : selectedCount ? `${selectedCount} focus area${selectedCount === 1 ? '' : 's'} selected` : 'No focus area selected, so findings will be hidden';
+
+  return (
+    <div>
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <p className="text-sm font-black text-slate-700">{isZh ? '关注方向' : 'Focus Areas'}</p>
+        <p className="text-xs font-bold text-slate-400">{helperText}</p>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <button className={`rounded-full border px-3 py-2 text-xs font-black transition hover:-translate-y-0.5 ${allSelected ? 'border-slate-950 bg-slate-950 text-white shadow-lg shadow-slate-200' : 'border-slate-200 bg-white text-slate-600 hover:border-indigo-200 hover:text-indigo-700'}`} onClick={onToggleAll} type="button">
+          {isZh ? '全部' : 'All'} <CountBadge count={totalFindings} selected={allSelected} />
+        </button>
+        {focusOptions.map((option) => {
+          const selected = focusAreas.includes(option.value);
+          return (
+            <button className={`rounded-full border px-3 py-2 text-xs font-black transition hover:-translate-y-0.5 ${selected ? 'border-indigo-600 bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'border-slate-200 bg-white text-slate-600 hover:border-indigo-200 hover:text-indigo-700'}`} key={option.value} onClick={() => onToggleFocus(option.value)} type="button">
+              {focusAreaLabels[language][option.value]} <CountBadge count={findingCounts[option.value]} selected={selected} />
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function CountBadge({ count, selected }: { count: number; selected: boolean }) {
+  return <span className={`ml-1 rounded-full px-1.5 py-0.5 ${selected ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'}`}>{count}</span>;
+}
+
 function TextArea({ label, monospace = false, onChange, placeholder, rows = 4, value }: { label: string; monospace?: boolean; onChange: (value: string) => void; placeholder?: string; rows?: number; value: string }) {
   return <label className="block"><span className="mb-2 block text-sm font-black text-slate-700">{label}</span><textarea className={`w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 ${monospace ? 'font-mono' : ''}`} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} rows={rows} value={value} /></label>;
 }
@@ -275,6 +307,7 @@ function Results({ analysis, copyReport, copyStatus, focusAreas, language }: { a
   const filteredFindings = filterFindingsByFocusAreas(analysis.findings, focusAreas);
   const selectedFocusLabels = focusAreas.map((area) => focusAreaLabels[language][area]).join(isZh ? '、' : ', ');
   const displayMarkdownReport = buildDisplayMarkdownReport(analysis, language);
+  const findingsEmptyMessage = getFindingsEmptyMessage({ analysis, focusAreas, language, selectedFocusLabels });
   const [selectedFile, setSelectedFile] = useState<FileChange | null>(null);
   const [selectedFinding, setSelectedFinding] = useState<ReviewFinding | null>(null);
 
@@ -342,7 +375,7 @@ function Results({ analysis, copyReport, copyStatus, focusAreas, language }: { a
 
         <Card title={isZh ? 'Review 建议' : 'Review Findings'}>
           <div className="max-h-[28rem] space-y-4 overflow-y-auto overscroll-contain pr-2 [scrollbar-gutter:stable]">
-            {filteredFindings.length === 0 ? <p className="rounded-2xl bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">{selectedFocusLabels ? (isZh ? `当前没有匹配${selectedFocusLabels}方向的 Review 建议。` : `No review findings matched the selected focus areas (${selectedFocusLabels}).`) : (isZh ? '当前未选择关注方向，请至少选择一个方向查看 Review 建议。' : 'No focus area selected. Select at least one focus area to view matching findings.')}</p> : filteredFindings.map((finding) => {
+            {filteredFindings.length === 0 ? <p className="rounded-2xl bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">{findingsEmptyMessage}</p> : filteredFindings.map((finding) => {
               const matchedFile = findFileForFinding(analysis.files, finding);
               return <button className="w-full overflow-hidden rounded-2xl border border-slate-200 bg-white text-left shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-xl focus:outline-none focus:ring-4 focus:ring-indigo-100 disabled:cursor-not-allowed disabled:opacity-70" disabled={!matchedFile} key={`${finding.file}-${finding.title}`} onClick={() => openFindingDiff(finding)} type="button"><div className="border-b border-slate-100 bg-slate-50 px-4 py-3"><span className={`rounded-full border px-3 py-1 text-xs font-bold ${severityClass(finding.severity)}`}>{labelRiskLevel(finding.severity, language)}</span><span className="ml-2 rounded-full bg-indigo-50 px-3 py-1 text-xs font-bold text-indigo-700">{labelCategory(finding.category, language)}</span></div><div className="p-4"><h3 className="font-black">{localizedFindingText(finding, 'title', language)}</h3><p className="mt-1 break-all font-mono text-xs font-semibold text-slate-500">{finding.line ? `${finding.file}:${finding.line}` : finding.file}</p><p className="mt-3 text-sm leading-6 text-slate-600">{localizedFindingText(finding, 'description', language)}</p><p className="mt-3 rounded-xl bg-slate-50 p-3 text-sm text-slate-700"><b>{isZh ? '建议' : 'Suggestion'}:</b> {localizedFindingText(finding, 'suggestion', language)}</p><p className="mt-3 text-xs font-black text-indigo-600">{matchedFile ? (isZh ? '点击查看相关 Diff' : 'Click to open related diff') : (isZh ? '未找到相关 Diff' : 'No matching file diff found')}</p></div></button>;
             })}
@@ -575,6 +608,21 @@ function filterFindingsByFocusAreas(findings: ReviewFinding[], focusAreas: Focus
   return findings.filter((finding) => focusAreas.some((area) => focusAreaMatchesCategory(area, finding.category)));
 }
 
+function getFocusAreaFindingCounts(findings: ReviewFinding[]) {
+  return Object.fromEntries(allFocusAreas.map((area) => [area, findings.filter((finding) => focusAreaMatchesCategory(area, finding.category)).length])) as Record<FocusArea, number>;
+}
+
+function getFindingsEmptyMessage({ analysis, focusAreas, language, selectedFocusLabels }: { analysis: ReviewAnalysisResponse; focusAreas: FocusArea[]; language: Language; selectedFocusLabels: string }) {
+  const isZh = language === 'zh';
+  if (analysis.findings.length === 0) {
+    return isZh ? '当前没有生成 Review 建议。可以尝试配置 LLM，或扩大关注方向后重新分析。' : 'No review findings were generated. Configure an LLM or broaden the focus areas and run the analysis again.';
+  }
+  if (focusAreas.length === 0) {
+    return isZh ? '当前没有选择任何关注方向。请选择“全部”或至少一个方向来查看 Review 建议。' : 'No focus area is selected. Choose All or at least one focus area to view review findings.';
+  }
+  return isZh ? `当前没有匹配“${selectedFocusLabels}”的 Review 建议。可以选择“全部”或切换其他方向查看。` : `No review findings match ${selectedFocusLabels}. Choose All or switch to another focus area.`;
+}
+
 function LanguageToggle({ language, setLanguage }: { language: Language; setLanguage: (language: Language) => void }) {
   return (
     <div className="flex items-center gap-1 rounded-full bg-slate-100 p-1 text-xs font-black text-slate-600">
@@ -614,3 +662,4 @@ function riskClass(level: string) {
 function Card({ children, title }: { children: ReactNode; title: string }) {
   return <section className="rounded-3xl border border-white/80 bg-white/90 p-6 shadow-xl shadow-slate-200/70 backdrop-blur transition hover:-translate-y-1 hover:shadow-2xl"><p className="mb-4 text-sm font-bold uppercase tracking-[0.16em] text-slate-400">{title}</p>{children}</section>;
 }
+
