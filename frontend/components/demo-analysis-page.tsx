@@ -4,8 +4,8 @@ import Link from 'next/link';
 import { CheckCircle2, Copy, Github, Loader2, Sparkles, TerminalSquare } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { analyzePullRequest, analyzeRawDiff, fetchDemoReview } from '@/lib/api';
-import { focusAreaLabels, isLanguage, languageNames, languageStorageKey, type Language } from '@/lib/i18n';
-import type { FocusArea, ReviewAnalysisResponse } from '@/lib/types';
+import { focusAreaLabels, isLanguage, labelCategory, labelFindingText, labelRiskLevel, labelRiskReason, labelRiskTag, languageNames, languageStorageKey, type Language } from '@/lib/i18n';
+import type { FocusArea, ReviewAnalysisResponse, ReviewFinding } from '@/lib/types';
 
 const focusOptions: { value: FocusArea; label: string }[] = [
   { value: 'security', label: 'Security' },
@@ -78,7 +78,10 @@ export default function DemoAnalysisPage() {
   }
 
   function toggleFocus(value: FocusArea) {
-    setFocusAreas((current) => current.includes(value) ? current.filter((item) => item !== value) : [...current, value]);
+    setFocusAreas((current) => {
+      if (current.length === 1 && current[0] === value) return [];
+      return [value];
+    });
   }
 
   function analyzePr() {
@@ -176,7 +179,7 @@ export default function DemoAnalysisPage() {
       </section>
 
       <section className="mx-auto max-w-6xl scroll-mt-32 pb-16 pt-4" id="results" ref={resultsRef}>
-        {analysis ? <Results analysis={analysis} copyReport={copyReport} copyStatus={copyStatus} language={language} /> : <div className="rounded-3xl border border-dashed border-indigo-200 bg-white/75 p-10 text-center text-slate-600 shadow-lg backdrop-blur transition hover:-translate-y-1 hover:shadow-xl"><div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600"><Sparkles className="h-5 w-5" /></div>{isZh ? '运行一次分析，或点击试用 Demo 加载完整结果。' : 'Run an analysis or click Try Demo to load results.'}</div>}
+        {analysis ? <Results analysis={analysis} copyReport={copyReport} copyStatus={copyStatus} focusAreas={focusAreas} language={language} /> : <div className="rounded-3xl border border-dashed border-indigo-200 bg-white/75 p-10 text-center text-slate-600 shadow-lg backdrop-blur transition hover:-translate-y-1 hover:shadow-xl"><div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600"><Sparkles className="h-5 w-5" /></div>{isZh ? '运行一次分析，或点击试用 Demo 加载完整结果。' : 'Run an analysis or click Try Demo to load results.'}</div>}
       </section>
     </main>
   );
@@ -190,10 +193,103 @@ function TextArea({ label, monospace = false, onChange, placeholder, rows = 4, v
   return <label className="block"><span className="mb-2 block text-sm font-black text-slate-700">{label}</span><textarea className={`w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 ${monospace ? 'font-mono' : ''}`} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} rows={rows} value={value} /></label>;
 }
 
-function Results({ analysis, copyReport, copyStatus, language }: { analysis: ReviewAnalysisResponse; copyReport: () => void; copyStatus: string; language: Language }) {
+function Results({ analysis, copyReport, copyStatus, focusAreas, language }: { analysis: ReviewAnalysisResponse; copyReport: () => void; copyStatus: string; focusAreas: FocusArea[]; language: Language }) {
   const risk = riskClass(analysis.riskAssessment.level);
   const isZh = language === 'zh';
-  return <div className="grid gap-6"><div><p className="text-sm font-black uppercase tracking-[0.22em] text-indigo-600">{isZh ? '分析结果' : 'Analysis Results'}</p><h2 className="mt-2 text-4xl font-black tracking-[-0.05em]">{isZh ? '结构化 Review 输出' : 'Structured review output'}</h2></div><section className="grid gap-6 lg:grid-cols-2"><Card title={isZh ? 'PR 概览' : 'PR Overview'}><h2 className="text-2xl font-black">{analysis.pullRequest.title}</h2><div className="mt-4 grid gap-3 text-sm text-slate-600 sm:grid-cols-2"><Meta label={isZh ? '作者' : 'Author'} value={analysis.pullRequest.author} /><Meta label={isZh ? '状态' : 'State'} value={analysis.pullRequest.state} /><Meta label={isZh ? '目标分支' : 'Base'} value={analysis.pullRequest.baseBranch} /><Meta label={isZh ? '来源分支' : 'Head'} value={analysis.pullRequest.headBranch} /><Meta label={isZh ? '文件数' : 'Files'} value={String(analysis.pullRequest.changedFiles)} /><Meta label={isZh ? '行数' : 'Lines'} value={`+${analysis.pullRequest.additions} / -${analysis.pullRequest.deletions}`} /></div></Card><Card title={isZh ? '风险评估' : 'Risk Assessment'}><div className={`rounded-3xl border p-5 ${risk.panel}`}><p className="text-5xl font-black">{analysis.riskAssessment.score}<span className="text-xl">/100</span></p><p className={`mt-3 inline-flex rounded-full border px-3 py-1 text-sm font-black ${risk.badge}`}>{analysis.riskAssessment.level}</p></div><ul className="mt-4 space-y-2 text-sm text-slate-600">{analysis.riskAssessment.reasons.map((reason) => <li className="flex gap-2" key={reason}><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-indigo-500" />{reason}</li>)}</ul></Card></section><Card title={isZh ? '变更总结' : 'Change Summary'}><p className="leading-8 text-slate-600">{analysis.changeSummary.overview}</p><div className="mt-4 grid gap-3 md:grid-cols-2">{analysis.changeSummary.keyChanges.map((item) => <div className="rounded-2xl bg-slate-50 p-4 text-sm font-semibold text-slate-700" key={item}>{item}</div>)}</div></Card><section className="grid gap-6 lg:grid-cols-2"><Card title={isZh ? '变更文件' : 'Changed Files'}><div className="space-y-4">{analysis.files.map((file) => <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 transition hover:-translate-y-0.5 hover:bg-white hover:shadow-lg" key={file.filename}><p className="break-all font-bold">{file.filename}</p><p className="mt-1 text-sm text-slate-500">{file.status} · +{file.additions} / -{file.deletions}</p><div className="mt-3 flex flex-wrap gap-2">{file.riskTags.map((tag) => <span className="rounded-full border border-indigo-100 bg-white px-3 py-1 text-xs font-bold text-indigo-700" key={tag}>{tag}</span>)}</div></div>)}</div></Card><Card title={isZh ? 'Review 建议' : 'Review Findings'}><div className="space-y-4">{analysis.findings.length === 0 ? <p className="rounded-2xl bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">{isZh ? '未返回 AI findings。规则风险分析仍然可用。' : 'No AI findings returned. Rule-based analysis is still available.'}</p> : analysis.findings.map((finding) => <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-xl" key={`${finding.file}-${finding.title}`}><div className="border-b border-slate-100 bg-slate-50 px-4 py-3"><span className={`rounded-full border px-3 py-1 text-xs font-bold ${severityClass(finding.severity)}`}>{finding.severity}</span><span className="ml-2 rounded-full bg-indigo-50 px-3 py-1 text-xs font-bold text-indigo-700">{finding.category}</span></div><div className="p-4"><h3 className="font-black">{finding.title}</h3><p className="mt-1 break-all font-mono text-xs font-semibold text-slate-500">{finding.line ? `${finding.file}:${finding.line}` : finding.file}</p><p className="mt-3 text-sm leading-6 text-slate-600">{finding.description}</p><p className="mt-3 rounded-xl bg-slate-50 p-3 text-sm text-slate-700"><b>{isZh ? '建议' : 'Suggestion'}:</b> {finding.suggestion}</p></div></article>)}</div></Card></section><section className="rounded-3xl bg-slate-950 p-6 text-white shadow-2xl shadow-slate-300/50 transition hover:-translate-y-1"><div className="flex items-center justify-between gap-4"><h2 className="text-2xl font-black">{isZh ? 'Markdown 报告' : 'Markdown Report'}</h2><button className={`inline-flex items-center gap-2 rounded-full px-5 py-3 text-sm font-bold transition ${copyStatus === (isZh ? '已复制！' : 'Copied!') ? 'bg-emerald-400 text-emerald-950' : 'bg-white text-slate-950'}`} onClick={copyReport} type="button">{copyStatus === (isZh ? '已复制！' : 'Copied!') ? <CheckCircle2 className="h-4 w-4" /> : <Copy className="h-4 w-4" />}{copyStatus || (isZh ? '复制报告' : 'Copy Report')}</button></div><pre className="mt-6 max-h-96 overflow-auto whitespace-pre-wrap rounded-2xl border border-slate-800 bg-slate-900 p-5 text-sm leading-7">{analysis.markdownReport}</pre></section></div>;
+  const changedFiles = analysis.pullRequest.changedFiles || analysis.files.length;
+  const additions = analysis.pullRequest.additions;
+  const deletions = analysis.pullRequest.deletions;
+  const summaryReasons = analysis.riskAssessment.reasons
+    .slice(0, 3)
+    .map((reason) => stripEndingPunctuation(labelRiskReason(reason, language)).trim())
+    .filter(Boolean);
+  const localizedOverview = isZh
+    ? `PRPilot 已分析 ${changedFiles} 个变更文件，共新增 ${additions} 行、删除 ${deletions} 行。本次评审识别到${labelRiskLevel(analysis.riskAssessment.level, language)}，建议优先关注${summaryReasons.length ? summaryReasons.join('、') : '核心业务逻辑和测试覆盖'}。`
+    : analysis.changeSummary.overview;
+  const filteredFindings = filterFindingsByFocusAreas(analysis.findings, focusAreas);
+  const selectedFocusLabels = focusAreas.map((area) => focusAreaLabels[language][area]).join(isZh ? '、' : ', ');
+
+  return (
+    <div className="grid gap-6">
+      <div>
+        <p className="text-sm font-black uppercase tracking-[0.22em] text-indigo-600">{isZh ? '分析结果' : 'Analysis Results'}</p>
+        <h2 className="mt-2 text-4xl font-black tracking-[-0.05em]">{isZh ? '结构化 Review 输出' : 'Structured review output'}</h2>
+      </div>
+
+      <section className="grid gap-6 lg:grid-cols-2">
+        <Card title={isZh ? 'PR 概览' : 'PR Overview'}>
+          <h2 className="text-2xl font-black">{analysis.pullRequest.title}</h2>
+          <div className="mt-4 grid gap-3 text-sm text-slate-600 sm:grid-cols-2">
+            <Meta label={isZh ? '作者' : 'Author'} value={analysis.pullRequest.author} />
+            <Meta label={isZh ? '状态' : 'State'} value={analysis.pullRequest.state} />
+            <Meta label={isZh ? '目标分支' : 'Base'} value={analysis.pullRequest.baseBranch} />
+            <Meta label={isZh ? '来源分支' : 'Head'} value={analysis.pullRequest.headBranch} />
+            <Meta label={isZh ? '文件数' : 'Files'} value={String(changedFiles)} />
+            <Meta label={isZh ? '行数' : 'Lines'} value={`+${additions} / -${deletions}`} />
+          </div>
+        </Card>
+
+        <Card title={isZh ? '风险评估' : 'Risk Assessment'}>
+          <div className={`rounded-3xl border p-5 ${risk.panel}`}>
+            <p className="text-5xl font-black">{analysis.riskAssessment.score}<span className="text-xl">/100</span></p>
+            <p className={`mt-3 inline-flex rounded-full border px-3 py-1 text-sm font-black ${risk.badge}`}>{labelRiskLevel(analysis.riskAssessment.level, language)}</p>
+          </div>
+          <ul className="mt-4 space-y-2 text-sm text-slate-600">
+            {analysis.riskAssessment.reasons.map((reason) => <li className="flex gap-2" key={reason}><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-indigo-500" />{labelRiskReason(reason, language)}</li>)}
+          </ul>
+        </Card>
+      </section>
+
+      <Card title={isZh ? '变更总结' : 'Change Summary'}>
+        <p className="leading-8 text-slate-600">{localizedOverview}</p>
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          {analysis.changeSummary.keyChanges.map((item) => <div className="rounded-2xl bg-slate-50 p-4 text-sm font-semibold text-slate-700" key={item}>{labelFindingText(item, language)}</div>)}
+        </div>
+      </Card>
+
+      <section className="grid gap-6 lg:grid-cols-2">
+        <Card title={isZh ? '变更文件' : 'Changed Files'}>
+          <div className="space-y-4">
+            {analysis.files.map((file) => <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 transition hover:-translate-y-0.5 hover:bg-white hover:shadow-lg" key={file.filename}><p className="break-all font-bold">{file.filename}</p><p className="mt-1 text-sm text-slate-500">{file.status} · +{file.additions} / -{file.deletions}</p><div className="mt-3 flex flex-wrap gap-2">{file.riskTags.map((tag) => <span className="rounded-full border border-indigo-100 bg-white px-3 py-1 text-xs font-bold text-indigo-700" key={tag}>{labelRiskTag(tag, language)}</span>)}</div></div>)}
+          </div>
+        </Card>
+
+        <Card title={isZh ? 'Review 建议' : 'Review Findings'}>
+          <div className="space-y-4">
+            {filteredFindings.length === 0 ? <p className="rounded-2xl bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">{selectedFocusLabels ? (isZh ? `当前关注方向（${selectedFocusLabels}）下没有发现对应的 Review 建议。` : `No review findings matched the selected focus areas (${selectedFocusLabels}).`) : (isZh ? '未选择关注方向。请选择至少一个方向后查看对应建议。' : 'No focus area selected. Select at least one focus area to view matching findings.')}</p> : filteredFindings.map((finding) => <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-xl" key={`${finding.file}-${finding.title}`}><div className="border-b border-slate-100 bg-slate-50 px-4 py-3"><span className={`rounded-full border px-3 py-1 text-xs font-bold ${severityClass(finding.severity)}`}>{labelRiskLevel(finding.severity, language)}</span><span className="ml-2 rounded-full bg-indigo-50 px-3 py-1 text-xs font-bold text-indigo-700">{labelCategory(finding.category, language)}</span></div><div className="p-4"><h3 className="font-black">{localizedFindingText(finding, 'title', language)}</h3><p className="mt-1 break-all font-mono text-xs font-semibold text-slate-500">{finding.line ? `${finding.file}:${finding.line}` : finding.file}</p><p className="mt-3 text-sm leading-6 text-slate-600">{localizedFindingText(finding, 'description', language)}</p><p className="mt-3 rounded-xl bg-slate-50 p-3 text-sm text-slate-700"><b>{isZh ? '建议' : 'Suggestion'}:</b> {localizedFindingText(finding, 'suggestion', language)}</p></div></article>)}
+          </div>
+        </Card>
+      </section>
+
+      <section className="rounded-3xl bg-slate-950 p-6 text-white shadow-2xl shadow-slate-300/50 transition hover:-translate-y-1">
+        <div className="flex items-center justify-between gap-4">
+          <h2 className="text-2xl font-black">{isZh ? 'Markdown 报告' : 'Markdown Report'}</h2>
+          <button className={`inline-flex items-center gap-2 rounded-full px-5 py-3 text-sm font-bold transition ${copyStatus === (isZh ? '已复制！' : 'Copied!') ? 'bg-emerald-400 text-emerald-950' : 'bg-white text-slate-950'}`} onClick={copyReport} type="button">{copyStatus === (isZh ? '已复制！' : 'Copied!') ? <CheckCircle2 className="h-4 w-4" /> : <Copy className="h-4 w-4" />}{copyStatus || (isZh ? '复制报告' : 'Copy Report')}</button>
+        </div>
+        <pre className="mt-6 max-h-96 overflow-auto whitespace-pre-wrap rounded-2xl border border-slate-800 bg-slate-900 p-5 text-sm leading-7">{analysis.markdownReport}</pre>
+      </section>
+    </div>
+  );
+}
+
+function localizedFindingText(finding: ReviewFinding, field: 'title' | 'description' | 'suggestion', language: Language) {
+  if (language === 'en') return finding[field];
+  const zhField = `${field}Zh` as 'titleZh' | 'descriptionZh' | 'suggestionZh';
+  return finding[zhField] || labelFindingText(finding[field], language);
+}
+
+function stripEndingPunctuation(value: string) {
+  return value.replace(/[。.!！？?]+$/u, '');
+}
+
+function focusAreaMatchesCategory(area: FocusArea, category: string) {
+  const normalized = category.toLowerCase();
+  return area === 'bug-risk' ? normalized === 'bug risk' : normalized === area;
+}
+
+function filterFindingsByFocusAreas(findings: ReviewFinding[], focusAreas: FocusArea[]) {
+  if (focusAreas.length === 0) return [];
+  return findings.filter((finding) => focusAreas.some((area) => focusAreaMatchesCategory(area, finding.category)));
 }
 
 function LanguageToggle({ language, setLanguage }: { language: Language; setLanguage: (language: Language) => void }) {

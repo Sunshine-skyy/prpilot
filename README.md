@@ -1,4 +1,4 @@
-﻿# PRPilot：AI 代码评审助手
+# PRPilot：AI 代码评审助手
 
 English Version: [README.en.md](README.en.md)
 
@@ -10,7 +10,7 @@ PRPilot 是一个 AI Pull Request Review Assistant，面向“正式人工 Revie
 >
 > Demo Video: 待补充
 >
-> Demo PR: 待补充
+> Demo PR: [https://github.com/Sunshine-skyy/prpilot/pull/19](https://github.com/Sunshine-skyy/prpilot/pull/19)
 
 ## 项目定位
 
@@ -25,7 +25,7 @@ PRPilot 不替代人工 Review。它的目标是在人工 Review 前完成预分
 
 - GitHub PR URL 分析；
 - Raw Diff 粘贴分析；
-- Try Demo 离线演示模式；
+- Try Demo 快速体验入口；
 - Focus Areas 关注方向选择；
 - 规则风险扫描；
 - 风险评分和风险等级；
@@ -37,15 +37,15 @@ PRPilot 不替代人工 Review。它的目标是在人工 Review 前完成预分
 - 前端中文 / English 语言切换；
 - 无 LLM API Key 时自动降级为规则分析模式。
 
-## 三层演示兜底
+## 多输入分析方式
 
-为了保证比赛 Demo 稳定，PRPilot 支持三种演示路径：
+PRPilot 支持多种 PR 分析入口，适配不同开发场景：
 
-1. 真实 GitHub PR + 真实 AI 分析；
-2. Raw Diff + 真实 AI 分析；
-3. Try Demo 固定数据离线演示。
+1. GitHub PR URL：适合直接分析 GitHub Pull Request；
+2. Raw Diff：适合无法直接访问仓库、使用其他代码托管平台，或只希望分析某段变更内容的场景；
+3. Try Demo：用于无需配置 GitHub Token 或 LLM API Key 时快速体验产品能力。
 
-即使 GitHub API、网络代理或 LLM 服务不可用，仍然可以通过 Try Demo 展示完整结果页面。
+这种设计让用户既可以接入真实 PR，也可以在私有仓库、受限网络或本地评估场景下完成代码变更分析。
 
 ## 技术栈
 
@@ -394,7 +394,7 @@ GitHub Token 是可选的：
 
 ## Demo PR
 
-Demo PR: 待补充
+Demo PR: [https://github.com/Sunshine-skyy/prpilot/pull/19](https://github.com/Sunshine-skyy/prpilot/pull/19)
 
 计划使用 `examples/demo-app` 构造一个受控风险 PR，包含：
 
@@ -456,7 +456,7 @@ Demo PR: 待补充
 - Review Prompt 构建；
 - OpenAI-compatible LLM Client；
 - Markdown Review Report 生成；
-- Try Demo 离线兜底；
+- Try Demo 快速体验入口；
 - 前端分析工作台；
 - How It Works 展示页；
 - 中文 / English 前端语言切换。

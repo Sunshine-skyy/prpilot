@@ -46,6 +46,9 @@ export type ReviewFinding = {
   title: string;
   description: string;
   suggestion: string;
+  titleZh?: string | null;
+  descriptionZh?: string | null;
+  suggestionZh?: string | null;
   confidence: number;
 };
 

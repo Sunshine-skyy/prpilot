@@ -1,4 +1,4 @@
-﻿# PRPilot: AI Pull Request Review Assistant
+# PRPilot: AI Pull Request Review Assistant
 
 中文版: [README.md](README.md)
 
@@ -10,7 +10,7 @@ PRPilot is an AI-powered Pull Request Review Assistant for the pre-human-review 
 >
 > Demo Video: TBD
 >
-> Demo PR: TBD
+> Demo PR: [https://github.com/Sunshine-skyy/prpilot/pull/19](https://github.com/Sunshine-skyy/prpilot/pull/19)
 
 ## Product Positioning
 
@@ -27,7 +27,7 @@ It helps users:
 
 - GitHub PR URL analysis;
 - Raw Diff analysis;
-- Offline Try Demo mode;
+- Quick Try Demo experience;
 - Focus Areas selection;
 - Rule-based risk scan;
 - Risk score and risk level;
@@ -39,15 +39,15 @@ It helps users:
 - Chinese / English frontend language toggle;
 - Safe rule-only fallback when no LLM API key is configured.
 
-## Three-level Demo Fallback
+## Flexible Analysis Inputs
 
-PRPilot supports three demo paths for a stable final presentation:
+PRPilot supports multiple analysis inputs for different development workflows:
 
-1. Real GitHub PR + real AI analysis;
-2. Raw Diff + real AI analysis;
-3. Try Demo with fixed offline data.
+1. GitHub PR URL: suitable for analyzing GitHub pull requests directly;
+2. Raw Diff: useful when the repository cannot be accessed directly, when using another code hosting platform, or when only a specific diff should be reviewed;
+3. Try Demo: helps users quickly explore the product without configuring a GitHub token or LLM API key.
 
-Even if GitHub API, proxy networking, or the LLM service is unavailable, Try Demo can still show a complete analysis result.
+This design lets users connect real pull requests while also supporting private repositories, restricted networks, and local diff review scenarios.
 
 ## Tech Stack
 
@@ -398,7 +398,7 @@ Design principles:
 
 ## Demo PR
 
-Demo PR: TBD
+Demo PR: [https://github.com/Sunshine-skyy/prpilot/pull/19](https://github.com/Sunshine-skyy/prpilot/pull/19)
 
 Planned controlled risks:
 
@@ -460,7 +460,7 @@ This project is implemented around the AI PR Review scenario. Core original work
 - review prompt builder;
 - OpenAI-compatible LLM client;
 - Markdown review report generator;
-- offline Try Demo fallback;
+- quick Try Demo experience;
 - frontend analysis workspace;
 - How It Works page;
 - Chinese / English frontend language toggle.
