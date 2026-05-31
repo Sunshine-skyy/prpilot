@@ -12,6 +12,12 @@ import org.springframework.stereotype.Service;
 @Service
 public class DemoReviewService {
 
+    private final MarkdownReportGenerator markdownReportGenerator;
+
+    public DemoReviewService(MarkdownReportGenerator markdownReportGenerator) {
+        this.markdownReportGenerator = markdownReportGenerator;
+    }
+
     public ReviewAnalysisResponse getDemoAnalysis() {
         PullRequestInfo pullRequest = new PullRequestInfo(
                 "Add token-based auth middleware",
@@ -122,47 +128,7 @@ public class DemoReviewService {
                 riskAssessment,
                 files,
                 findings,
-                buildMarkdownReport(pullRequest, changeSummary, riskAssessment, findings)
+                markdownReportGenerator.generate(pullRequest, changeSummary, riskAssessment, files, findings, "zh")
         );
-    }
-
-    private String buildMarkdownReport(
-            PullRequestInfo pullRequest,
-            ChangeSummary changeSummary,
-            RiskAssessment riskAssessment,
-            List<ReviewFinding> findings
-    ) {
-        StringBuilder report = new StringBuilder();
-        report.append("## PRPilot Review Report\n\n");
-        report.append("### PR Summary\n");
-        report.append("- Title: ").append(pullRequest.title()).append("\n");
-        report.append("- Author: ").append(pullRequest.author()).append("\n");
-        report.append("- Changed files: ").append(pullRequest.changedFiles()).append("\n");
-        report.append("- Additions/Deletions: +").append(pullRequest.additions())
-                .append(" / -").append(pullRequest.deletions()).append("\n\n");
-
-        report.append("### Change Summary\n");
-        report.append(changeSummary.overview()).append("\n\n");
-
-        report.append("### Risk Assessment\n");
-        report.append("- Score: ").append(riskAssessment.score()).append(" / 100\n");
-        report.append("- Level: ").append(riskAssessment.level()).append("\n");
-        for (String reason : riskAssessment.reasons()) {
-            report.append("- ").append(reason).append("\n");
-        }
-        report.append("\n");
-
-        report.append("### Review Findings\n");
-        for (ReviewFinding finding : findings) {
-            report.append("- [").append(finding.severity()).append("] ")
-                    .append(finding.title()).append(" (`")
-                    .append(finding.file()).append("`)\n");
-        }
-
-        report.append("\n### Suggested Next Steps\n");
-        report.append("- Remove sensitive logging from auth code.\n");
-        report.append("- Move secret-like configuration to environment variables.\n");
-        report.append("- Add focused tests for authentication and payment permission paths.\n");
-        return report.toString();
     }
 }

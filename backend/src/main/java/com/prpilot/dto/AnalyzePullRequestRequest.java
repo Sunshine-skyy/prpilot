@@ -7,6 +7,7 @@ import java.util.List;
 public record AnalyzePullRequestRequest(
         @NotBlank String prUrl,
         String githubToken,
-        @Size(max = 5) List<String> focusAreas
+        @Size(max = 5) List<String> focusAreas,
+        String language
 ) {
 }

@@ -89,7 +89,7 @@ export default function DemoAnalysisPage() {
       setError(isZh ? '请输入 GitHub Pull Request URL。' : 'Please enter a GitHub pull request URL.');
       return;
     }
-    void run(isZh ? '正在分析 PR...' : 'Analyzing PR...', () => analyzePullRequest({ prUrl, githubToken, focusAreas }));
+    void run(isZh ? '正在分析 PR...' : 'Analyzing PR...', () => analyzePullRequest({ prUrl, githubToken, focusAreas, language }));
   }
 
   function analyzeDiff() {
@@ -97,13 +97,13 @@ export default function DemoAnalysisPage() {
       setError(isZh ? '请粘贴 Raw Diff。' : 'Please paste a raw diff.');
       return;
     }
-    void run(isZh ? '正在分析 Raw Diff...' : 'Analyzing Raw Diff...', () => analyzeRawDiff({ title: rawTitle, description: rawDescription, diff: rawDiff, focusAreas }));
+    void run(isZh ? '正在分析 Raw Diff...' : 'Analyzing Raw Diff...', () => analyzeRawDiff({ title: rawTitle, description: rawDescription, diff: rawDiff, focusAreas, language }));
   }
 
   async function copyReport() {
     if (!analysis?.markdownReport) return;
     try {
-      await navigator.clipboard.writeText(analysis.markdownReport);
+      await navigator.clipboard.writeText(buildDisplayMarkdownReport(analysis, language));
       setCopyStatus(isZh ? '已复制！' : 'Copied!');
       setTimeout(() => setCopyStatus(''), 2200);
     } catch {
@@ -208,6 +208,7 @@ function Results({ analysis, copyReport, copyStatus, focusAreas, language }: { a
     : analysis.changeSummary.overview;
   const filteredFindings = filterFindingsByFocusAreas(analysis.findings, focusAreas);
   const selectedFocusLabels = focusAreas.map((area) => focusAreaLabels[language][area]).join(isZh ? '、' : ', ');
+  const displayMarkdownReport = buildDisplayMarkdownReport(analysis, language);
 
   return (
     <div className="grid gap-6">
@@ -266,10 +267,83 @@ function Results({ analysis, copyReport, copyStatus, focusAreas, language }: { a
           <h2 className="text-2xl font-black">{isZh ? 'Markdown 报告' : 'Markdown Report'}</h2>
           <button className={`inline-flex items-center gap-2 rounded-full px-5 py-3 text-sm font-bold transition ${copyStatus === (isZh ? '已复制！' : 'Copied!') ? 'bg-emerald-400 text-emerald-950' : 'bg-white text-slate-950'}`} onClick={copyReport} type="button">{copyStatus === (isZh ? '已复制！' : 'Copied!') ? <CheckCircle2 className="h-4 w-4" /> : <Copy className="h-4 w-4" />}{copyStatus || (isZh ? '复制报告' : 'Copy Report')}</button>
         </div>
-        <pre className="mt-6 max-h-96 overflow-auto whitespace-pre-wrap rounded-2xl border border-slate-800 bg-slate-900 p-5 text-sm leading-7">{analysis.markdownReport}</pre>
+        <pre className="mt-6 max-h-96 overflow-auto whitespace-pre-wrap rounded-2xl border border-slate-800 bg-slate-900 p-5 text-sm leading-7">{displayMarkdownReport}</pre>
       </section>
     </div>
   );
+}
+
+function buildDisplayMarkdownReport(analysis: ReviewAnalysisResponse, language: Language) {
+  const isZh = language === 'zh';
+  const report = analysis.markdownReport || '';
+  if (isZh && report.startsWith('## PRPilot 评审报告')) return report;
+  if (!isZh && report.startsWith('## PRPilot Review Report')) return report;
+
+  return isZh ? buildChineseMarkdownReport(analysis) : buildEnglishMarkdownReport(analysis);
+}
+
+function buildEnglishMarkdownReport(analysis: ReviewAnalysisResponse) {
+  const { pullRequest, changeSummary, riskAssessment, files, findings } = analysis;
+  const lines = [
+    '## PRPilot Review Report',
+    '',
+    '### PR Summary',
+    `- Title: ${pullRequest.title}`,
+    `- Source: ${pullRequest.url}`,
+    `- Changed files: ${pullRequest.changedFiles}`,
+    `- Additions/Deletions: +${pullRequest.additions} / -${pullRequest.deletions}`,
+    '',
+    '### Risk Assessment',
+    `- Score: ${riskAssessment.score} / 100`,
+    `- Level: ${riskAssessment.level}`,
+    ...riskAssessment.reasons.map((reason) => `- ${reason}`),
+    '',
+    '### Key Changes',
+    changeSummary.overview,
+    ...changeSummary.keyChanges.map((item) => `- ${item}`),
+    '',
+    '### Changed Files',
+    ...files.map((file) => `- \`${file.filename}\` (+${file.additions} / -${file.deletions})${file.riskTags.length ? ` — risk tags: ${file.riskTags.join(', ')}` : ''}`),
+    '',
+    '### Review Findings',
+    ...(findings.length ? findings.map((finding) => `- [${finding.severity}] ${finding.title} (\`${finding.file}\`)`) : ['- No AI review findings were generated.']),
+    '',
+    '### Suggested Next Steps',
+    ...(riskAssessment.reasons.length ? ['- Review files marked with risk tags before merging.', '- Add or update focused tests for risky behavior.', '- Use the LLM analysis flow for detailed code review findings.'] : ['- Continue with normal human review.']),
+  ];
+  return `${lines.join('\n')}\n`;
+}
+
+function buildChineseMarkdownReport(analysis: ReviewAnalysisResponse) {
+  const { pullRequest, changeSummary, riskAssessment, files, findings } = analysis;
+  const lines = [
+    '## PRPilot 评审报告',
+    '',
+    '### PR 概览',
+    `- 标题：${pullRequest.title}`,
+    `- 来源：${pullRequest.url}`,
+    `- 变更文件数：${pullRequest.changedFiles}`,
+    `- 新增/删除行数：+${pullRequest.additions} / -${pullRequest.deletions}`,
+    '',
+    '### 风险评估',
+    `- 分数：${riskAssessment.score} / 100`,
+    `- 等级：${labelRiskLevel(riskAssessment.level, 'zh')}`,
+    ...riskAssessment.reasons.map((reason) => `- ${labelRiskReason(reason, 'zh')}`),
+    '',
+    '### 关键变更',
+    labelFindingText(changeSummary.overview, 'zh'),
+    ...changeSummary.keyChanges.map((item) => `- ${labelFindingText(item, 'zh')}`),
+    '',
+    '### 变更文件',
+    ...files.map((file) => `- \`${file.filename}\` (+${file.additions} / -${file.deletions})${file.riskTags.length ? ` — 风险标签：${file.riskTags.map((tag) => labelRiskTag(tag, 'zh')).join('、')}` : ''}`),
+    '',
+    '### Review 建议',
+    ...(findings.length ? findings.map((finding) => `- [${labelRiskLevel(finding.severity, 'zh')}] ${localizedFindingText(finding, 'title', 'zh')} (\`${finding.file}\`)`) : ['- 当前没有生成 AI Review 建议。']),
+    '',
+    '### 建议下一步',
+    ...(riskAssessment.reasons.length ? ['- 合并前优先检查带风险标签的文件。', '- 针对高风险行为补充或更新测试。', '- 结合 LLM 生成的 Review 建议做进一步代码审查。'] : ['- 继续进行常规人工 Review。']),
+  ];
+  return `${lines.join('\n')}\n`;
 }
 
 function localizedFindingText(finding: ReviewFinding, field: 'title' | 'description' | 'suggestion', language: Language) {
