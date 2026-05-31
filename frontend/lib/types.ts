@@ -1,3 +1,5 @@
+export type Language = 'zh' | 'en';
+
 export type PullRequestInfo = {
   title: string;
   url: string;
@@ -67,6 +69,7 @@ export type AnalyzePullRequestRequest = {
   prUrl: string;
   githubToken?: string;
   focusAreas: FocusArea[];
+  language: Language;
 };
 
 export type AnalyzeDiffRequest = {
@@ -74,4 +77,5 @@ export type AnalyzeDiffRequest = {
   description: string;
   diff: string;
   focusAreas: FocusArea[];
+  language: Language;
 };

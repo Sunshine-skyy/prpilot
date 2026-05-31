@@ -5,7 +5,11 @@ import org.springframework.stereotype.Component;
 @Component
 public class ReviewPromptBuilder {
 
-    public String buildSystemPrompt() {
+    public String buildSystemPrompt(String language) {
+        String findingLanguageRule = isChinese(language)
+                ? "For titleZh, descriptionZh, and suggestionZh, write polished Simplified Chinese. Also provide accurate English equivalents in title, description, and suggestion."
+                : "For title, description, and suggestion, write polished English. Also provide accurate Simplified Chinese equivalents in titleZh, descriptionZh, and suggestionZh.";
+
         return """
                 You are a senior code reviewer helping developers review pull requests before human review.
 
@@ -20,10 +24,9 @@ public class ReviewPromptBuilder {
                 6. Prefer fewer high-signal findings over many noisy findings.
                 7. Each finding should reference a file whenever possible.
                 8. Output valid JSON only. Do not include markdown fences.
-                9. For title, description, and suggestion, write in English.
-                10. Also provide Simplified Chinese translations in titleZh, descriptionZh, and suggestionZh.
-                11. Keep severity and category values in English exactly as the allowed enum values so the UI can classify findings.
-                12. File paths, symbols, function names, class names, package names, and technical identifiers may remain in their original language.
+                9. %s
+                10. Keep severity and category values in English exactly as the allowed enum values so the UI can classify findings.
+                11. File paths, symbols, function names, class names, package names, and technical identifiers may remain in their original language.
 
                 Return exactly this JSON shape:
                 {
@@ -46,10 +49,14 @@ public class ReviewPromptBuilder {
 
                 If there are no evidence-based issues, return:
                 { "findings": [] }
-                """;
+                """.formatted(findingLanguageRule);
     }
 
-    public String buildUserPrompt(String reviewContext) {
+    public String buildUserPrompt(String reviewContext, String language) {
+        String languageInstruction = isChinese(language)
+                ? "Prefer Simplified Chinese for the primary localized fields titleZh, descriptionZh, and suggestionZh."
+                : "Prefer English for the primary fields title, description, and suggestion.";
+
         return """
                 Review the following pull request context and generate structured review findings.
 
@@ -59,12 +66,16 @@ public class ReviewPromptBuilder {
                 - Keep confidence between 0 and 1.
                 - Use only the allowed severity and category values.
                 - Return JSON only.
-                - Write title, description, and suggestion in English.
-                - Also include titleZh, descriptionZh, and suggestionZh in Simplified Chinese.
+                - %s
+                - Always include both English fields and Simplified Chinese fields.
                 - Keep file paths and code identifiers unchanged.
 
                 Context:
                 %s
-                """.formatted(reviewContext);
+                """.formatted(languageInstruction, reviewContext);
+    }
+
+    private boolean isChinese(String language) {
+        return "zh".equalsIgnoreCase(language);
     }
 }

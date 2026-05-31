@@ -48,7 +48,7 @@ public class ReviewAnalysisService {
     public ReviewAnalysisResponse analyzeDiff(AnalyzeDiffRequest request) {
         List<FileChange> parsedFiles = diffParser.parse(request.diff());
         PullRequestInfo pullRequest = buildRawDiffPullRequestInfo(request, parsedFiles);
-        return analyzeFiles(pullRequest, parsedFiles, request.description(), request.focusAreas());
+        return analyzeFiles(pullRequest, parsedFiles, request.description(), request.focusAreas(), request.language());
     }
 
     public ReviewAnalysisResponse analyzePullRequest(AnalyzePullRequestRequest request) {
@@ -60,7 +60,8 @@ public class ReviewAnalysisService {
                 fetchedPullRequest.pullRequest(),
                 fetchedPullRequest.files(),
                 null,
-                request.focusAreas()
+                request.focusAreas(),
+                request.language()
         );
     }
 
@@ -68,17 +69,26 @@ public class ReviewAnalysisService {
             PullRequestInfo pullRequest,
             List<FileChange> files,
             String description,
-            List<String> focusAreas
+            List<String> focusAreas,
+            String language
     ) {
+        String normalizedLanguage = normalizeLanguage(language);
         RiskRuleResult riskRuleResult = riskRuleEngine.analyze(pullRequest, files);
         ChangeSummary changeSummary = buildChangeSummary(description, riskRuleResult.files());
-        List<ReviewFinding> findings = generateFindings(pullRequest, changeSummary, riskRuleResult, focusAreas);
+        List<ReviewFinding> findings = generateFindings(
+                pullRequest,
+                changeSummary,
+                riskRuleResult,
+                focusAreas,
+                normalizedLanguage
+        );
         String markdownReport = markdownReportGenerator.generate(
                 pullRequest,
                 changeSummary,
                 riskRuleResult.riskAssessment(),
                 riskRuleResult.files(),
-                findings
+                findings,
+                normalizedLanguage
         );
 
         return new ReviewAnalysisResponse(
@@ -95,7 +105,8 @@ public class ReviewAnalysisService {
             PullRequestInfo pullRequest,
             ChangeSummary changeSummary,
             RiskRuleResult riskRuleResult,
-            List<String> focusAreas
+            List<String> focusAreas,
+            String language
     ) {
         if (!llmClient.isAvailable()) {
             return List.of();
@@ -109,8 +120,8 @@ public class ReviewAnalysisService {
                 focusAreas
         );
         return llmClient.generateReviewFindings(
-                reviewPromptBuilder.buildSystemPrompt(),
-                reviewPromptBuilder.buildUserPrompt(context)
+                reviewPromptBuilder.buildSystemPrompt(language),
+                reviewPromptBuilder.buildUserPrompt(context, language)
         );
     }
 
@@ -159,5 +170,9 @@ public class ReviewAnalysisService {
                         files.stream().mapToInt(FileChange::additions).sum(),
                         files.stream().mapToInt(FileChange::deletions).sum()
                 );
+    }
+
+    private String normalizeLanguage(String language) {
+        return "zh".equalsIgnoreCase(language) ? "zh" : "en";
     }
 }

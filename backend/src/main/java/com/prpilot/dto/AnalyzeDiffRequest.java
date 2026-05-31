@@ -8,6 +8,7 @@ public record AnalyzeDiffRequest(
         String title,
         String description,
         @NotBlank String diff,
-        @Size(max = 5) List<String> focusAreas
+        @Size(max = 5) List<String> focusAreas,
+        String language
 ) {
 }
