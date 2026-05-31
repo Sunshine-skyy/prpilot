@@ -5,7 +5,7 @@ import { CheckCircle2, Copy, Github, Loader2, Sparkles, TerminalSquare } from 'l
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { analyzePullRequest, analyzeRawDiff, fetchDemoReview } from '@/lib/api';
 import { focusAreaLabels, isLanguage, labelCategory, labelFindingText, labelRiskLevel, labelRiskReason, labelRiskTag, languageNames, languageStorageKey, type Language } from '@/lib/i18n';
-import type { FocusArea, ReviewAnalysisResponse, ReviewFinding } from '@/lib/types';
+import type { FileChange, FocusArea, ReviewAnalysisResponse, ReviewFinding } from '@/lib/types';
 
 const focusOptions: { value: FocusArea; label: string }[] = [
   { value: 'security', label: 'Security' },
@@ -209,6 +209,7 @@ function Results({ analysis, copyReport, copyStatus, focusAreas, language }: { a
   const filteredFindings = filterFindingsByFocusAreas(analysis.findings, focusAreas);
   const selectedFocusLabels = focusAreas.map((area) => focusAreaLabels[language][area]).join(isZh ? '、' : ', ');
   const displayMarkdownReport = buildDisplayMarkdownReport(analysis, language);
+  const [selectedFile, setSelectedFile] = useState<FileChange | null>(null);
 
   return (
     <div className="grid gap-6">
@@ -251,7 +252,7 @@ function Results({ analysis, copyReport, copyStatus, focusAreas, language }: { a
       <section className="grid gap-6 lg:grid-cols-2">
         <Card title={isZh ? '变更文件' : 'Changed Files'}>
           <div className="max-h-[28rem] space-y-4 overflow-y-auto overscroll-contain pr-2 [scrollbar-gutter:stable]">
-            {analysis.files.map((file) => <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 transition hover:-translate-y-0.5 hover:bg-white hover:shadow-lg" key={file.filename}><p className="break-all font-bold">{file.filename}</p><p className="mt-1 text-sm text-slate-500">{file.status} · +{file.additions} / -{file.deletions}</p><div className="mt-3 flex flex-wrap gap-2">{file.riskTags.map((tag) => <span className="rounded-full border border-indigo-100 bg-white px-3 py-1 text-xs font-bold text-indigo-700" key={tag}>{labelRiskTag(tag, language)}</span>)}</div></div>)}
+            {analysis.files.map((file) => <button className="w-full rounded-2xl border border-slate-100 bg-slate-50 p-4 text-left transition hover:-translate-y-0.5 hover:bg-white hover:shadow-lg focus:outline-none focus:ring-4 focus:ring-indigo-100" key={file.filename} onClick={() => setSelectedFile(file)} type="button"><p className="break-all font-bold">{file.filename}</p><p className="mt-1 text-sm text-slate-500">{file.status} · +{file.additions} / -{file.deletions}</p><div className="mt-3 flex flex-wrap gap-2">{file.riskTags.map((tag) => <span className="rounded-full border border-indigo-100 bg-white px-3 py-1 text-xs font-bold text-indigo-700" key={tag}>{labelRiskTag(tag, language)}</span>)}</div><p className="mt-3 text-xs font-bold text-indigo-600">{isZh ? '点击查看 Diff 预览' : 'Click to preview diff'}</p></button>)}
           </div>
         </Card>
 
@@ -269,8 +270,61 @@ function Results({ analysis, copyReport, copyStatus, focusAreas, language }: { a
         </div>
         <pre className="mt-6 max-h-96 overflow-auto whitespace-pre-wrap rounded-2xl border border-slate-800 bg-slate-900 p-5 text-sm leading-7">{displayMarkdownReport}</pre>
       </section>
+      {selectedFile ? <FileDiffModal file={selectedFile} language={language} onClose={() => setSelectedFile(null)} /> : null}
     </div>
   );
+}
+
+function FileDiffModal({ file, language, onClose }: { file: FileChange; language: Language; onClose: () => void }) {
+  const isZh = language === 'zh';
+  const lines = file.patch ? file.patch.split('\n') : [];
+  const visibleLines = lines.slice(0, 400);
+  const isTruncated = lines.length > visibleLines.length;
+
+  return (
+    <div aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm" onClick={onClose} role="dialog">
+      <section className="flex max-h-[86vh] w-[min(96vw,72rem)] flex-col overflow-hidden rounded-3xl border border-white/80 bg-white shadow-2xl shadow-slate-950/30" onClick={(event) => event.stopPropagation()}>
+        <div className="border-b border-slate-200 bg-slate-50/90 p-5">
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div>
+              <p className="text-sm font-black uppercase tracking-[0.18em] text-indigo-600">{isZh ? '文件 Diff 预览' : 'File Diff Preview'}</p>
+              <h3 className="mt-2 break-all text-xl font-black text-slate-950">{file.filename}</h3>
+              <p className="mt-2 text-sm font-semibold text-slate-500">{file.status} · +{file.additions} / -{file.deletions}</p>
+            </div>
+            <button className="rounded-full bg-slate-950 px-5 py-2 text-sm font-black text-white transition hover:bg-indigo-700" onClick={onClose} type="button">{isZh ? '关闭' : 'Close'}</button>
+          </div>
+          {file.riskTags.length ? <div className="mt-4 flex flex-wrap gap-2">{file.riskTags.map((tag) => <span className="rounded-full border border-indigo-100 bg-white px-3 py-1 text-xs font-bold text-indigo-700" key={tag}>{labelRiskTag(tag, language)}</span>)}</div> : null}
+        </div>
+
+        <div className="overflow-y-auto bg-slate-950 p-4 [scrollbar-gutter:stable]">
+          {visibleLines.length ? (
+            <pre className="min-w-full overflow-x-auto rounded-2xl border border-slate-800 bg-slate-900 py-3 text-xs leading-6 text-slate-200">
+              {visibleLines.map((line, index) => <DiffLine key={`${index}-${line}`} line={line} />)}
+            </pre>
+          ) : (
+            <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6 text-sm leading-7 text-slate-300">
+              <p className="font-bold text-white">{isZh ? '该文件没有可展示的 diff。' : 'No displayable diff is available for this file.'}</p>
+              <p className="mt-2">{isZh ? '这可能是因为文件为二进制、diff 过大、仅重命名，或 GitHub API 未返回 patch。' : 'This can happen for binary files, very large diffs, renames, or files omitted by the GitHub API.'}</p>
+            </div>
+          )}
+          {isTruncated ? <p className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-800">{isZh ? '当前仅显示前 400 行。为保证页面性能，Diff 预览已截断。' : 'Showing the first 400 lines. The diff preview was truncated for performance.'}</p> : null}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function DiffLine({ line }: { line: string }) {
+  const lineClass = diffLineClass(line);
+  return <code className={`block whitespace-pre px-4 font-mono ${lineClass}`}>{line || ' '}</code>;
+}
+
+function diffLineClass(line: string) {
+  if (line.startsWith('+') && !line.startsWith('+++')) return 'bg-emerald-950/60 text-emerald-200';
+  if (line.startsWith('-') && !line.startsWith('---')) return 'bg-rose-950/60 text-rose-200';
+  if (line.startsWith('@@')) return 'bg-indigo-950/80 text-indigo-200';
+  if (line.startsWith('diff --git') || line.startsWith('index ') || line.startsWith('---') || line.startsWith('+++')) return 'bg-slate-800/80 text-slate-400';
+  return 'text-slate-300';
 }
 
 function buildDisplayMarkdownReport(analysis: ReviewAnalysisResponse, language: Language) {
