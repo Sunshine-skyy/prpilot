@@ -8,7 +8,7 @@ PRPilot 是一个 AI Pull Request Review Assistant，面向“正式人工 Revie
 >
 > 议题方向：题目三，AI PR Review 助手
 >
-> Demo Video: 待补充
+> Demo Video: [https://www.bilibili.com/video/BV1VuVQ6KEVi/](https://www.bilibili.com/video/BV1VuVQ6KEVi/)
 >
 > Demo PR: [https://github.com/Sunshine-skyy/prpilot/pull/19](https://github.com/Sunshine-skyy/prpilot/pull/19)
 

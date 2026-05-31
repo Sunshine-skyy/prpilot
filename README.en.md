@@ -8,7 +8,7 @@ PRPilot is an AI-powered Pull Request Review Assistant for the pre-human-review 
 >
 > Topic: AI PR Review Assistant
 >
-> Demo Video: TBD
+> Demo Video: [https://www.bilibili.com/video/BV1VuVQ6KEVi/](https://www.bilibili.com/video/BV1VuVQ6KEVi/)
 >
 > Demo PR: [https://github.com/Sunshine-skyy/prpilot/pull/19](https://github.com/Sunshine-skyy/prpilot/pull/19)
 
