@@ -2,7 +2,7 @@
 
 English Version: [README.en.md](README.en.md)
 
-PRPilot 是一个 AI Pull Request Review Assistant，面向“正式人工 Review 前”的代码评审准备阶段。它可以帮助开发者和 Reviewer 快速理解 PR 变更、识别潜在风险，并生成结构化 Review 建议和可复制的 Markdown 报告。
+PRPilot 是一个 AI Pull Request Review Assistant，面向“正式人工 Review 前”的代码评审准备阶段。它帮助开发者和 Reviewer 快速理解 PR 变更、识别潜在风险、查看结构化 Review 建议，并生成可复制到 GitHub PR 评论区的 Markdown 报告。
 
 > 参赛项目：七牛云 × XEngineer 72 小时限时实战挑战
 >
@@ -19,23 +19,73 @@ PRPilot 不替代人工 Review。它的目标是在人工 Review 前完成预分
 - 总结 PR 做了什么；
 - 标记可能有风险的文件和变更；
 - 根据关注方向生成 Review 建议；
-- 输出可以直接复制到 GitHub PR 评论区的 Markdown 报告。
+- 帮助 Reviewer 更快定位高风险代码；
+- 输出可以直接复制的 Markdown Review 报告。
 
-## 核心功能
+## 当前已实现功能
+
+### 分析入口
 
 - GitHub PR URL 分析；
 - Raw Diff 粘贴分析；
 - Try Demo 快速体验入口；
-- Focus Areas 关注方向选择；
+- 可选 GitHub Token，支持私有 PR 或 GitHub API 限流场景。
+
+### 风险分析与 Review 输出
+
 - 规则风险扫描；
 - 风险评分和风险等级；
 - PR 变更总结；
+- 文件级风险标签；
 - LLM Review Findings；
 - Markdown Review Report；
 - Copy Report；
+- 无 LLM API Key 时自动降级为规则分析模式。
+
+### SSE 流式分析进度
+
+后端提供 SSE 接口：
+
+- `POST /api/reviews/analyze-pr-stream`
+- `POST /api/reviews/analyze-diff-stream`
+
+前端在分析过程中会按阶段展示实时进度，阶段包括：
+
+- 拉取 GitHub PR 信息；
+- 解析代码变更 Diff；
+- 执行规则风险分析；
+- 调用 LLM 生成 Review 建议；
+- 生成 Markdown 报告；
+- 分析完成。
+
+页面上每个阶段会按顺序推进，已完成阶段会变绿，当前阶段显示 loading 状态，并展示最新分析消息。
+
+### Focus Areas 关注方向过滤
+
+- 支持真正多选；
+- 支持“全部”一键全选 / 清空；
+- 默认选中全部关注方向；
+- 每个关注方向显示对应 Review finding 数量；
+- “全部”显示总 finding 数量；
+- 当前选择状态会显示为“已选择全部方向”“已选择 N 个方向”或“未选择方向”；
+- 筛选结果为空时区分不同原因：
+  - 没有生成任何 Review 建议；
+  - 没有选择任何关注方向；
+  - 当前选择方向没有匹配结果。
+
+### Diff 与 Finding 联动
+
+- Finding 点击后可定位到相关文件 Diff 预览；
+- 文件 Diff 预览支持目标行高亮；
+- 长 Diff 会截断展示，避免页面性能问题；
+- 无 patch、二进制文件、过大 diff 或 GitHub API 未返回 patch 时，会展示可理解的空状态说明。
+
+### 前端体验
+
 - How It Works 独立展示页；
 - 前端中文 / English 语言切换；
-- 无 LLM API Key 时自动降级为规则分析模式。
+- 响应式 UI；
+- 分析结果区、文件列表、Review Findings、Markdown 报告分区展示。
 
 ## 多输入分析方式
 
@@ -47,7 +97,9 @@ PRPilot 支持多种 PR 分析入口，适配不同开发场景：
 
 这种设计让用户既可以接入真实 PR，也可以在私有仓库、受限网络或本地评估场景下完成代码变更分析。
 
-## 技术栈
+## 技术栈与第三方依赖
+
+本项目不是零依赖项目，使用了后端和前端框架及工具库。核心 PR 分析流程、风险规则、上下文构建、Prompt 构建、Markdown 报告生成、SSE 进度流和前端交互逻辑由本项目实现。
 
 ### 后端
 
@@ -56,23 +108,32 @@ PRPilot 支持多种 PR 分析入口，适配不同开发场景：
 - Spring Web；
 - Spring Validation；
 - Spring WebFlux WebClient；
+- Jackson；
 - Maven；
-- Jackson。
+- Spring Boot Starter Test。
 
 ### 前端
 
 - Next.js 15；
 - React 19；
+- React DOM；
 - TypeScript；
 - Tailwind CSS；
-- shadcn/ui-ready 配置；
-- lucide-react。
+- lucide-react；
+- Radix Slot；
+- clsx；
+- tailwind-merge；
+- class-variance-authority；
+- tailwindcss-animate；
+- PostCSS。
 
 ### 模型调用
 
 - OpenAI-compatible API；
 - 默认配置为阿里云百炼 DashScope compatible mode；
-- 默认模型：`qwen-turbo`。
+- 默认模型：`qwen3-coder-plus`。
+
+`qwen3-coder-plus` 更适合当前项目，因为 PRPilot 的核心任务是代码 diff 理解、风险判断和结构化 Review Findings 生成，而不是普通聊天问答。
 
 ## 仓库结构
 
@@ -108,6 +169,7 @@ Frontend
   ├─ GitHub PR URL Input
   ├─ Raw Diff Input
   ├─ Focus Areas
+  ├─ SSE Progress Timeline
   ├─ Try Demo
   └─ Results / Markdown Report
 
@@ -144,6 +206,8 @@ LLM Review Agent
 Structured Review Response
 ↓
 Markdown Review Report
+↓
+SSE Progress / Frontend Result Display
 ```
 
 ## 后端接口
@@ -180,11 +244,12 @@ POST /api/reviews/analyze-diff
   "title": "Improve auth middleware",
   "description": "This patch updates token validation.",
   "diff": "diff --git a/src/auth/middleware.ts b/src/auth/middleware.ts ...",
-  "focusAreas": ["security", "testing"]
+  "focusAreas": ["security", "testing"],
+  "language": "zh"
 }
 ```
 
-### 完整 GitHub PR 分析
+### GitHub PR 分析
 
 ```text
 POST /api/reviews/analyze-pr
@@ -194,8 +259,21 @@ POST /api/reviews/analyze-pr
 {
   "prUrl": "https://github.com/owner/repo/pull/123",
   "githubToken": "",
-  "focusAreas": ["security", "bug-risk", "testing"]
+  "focusAreas": ["security", "bug-risk", "testing"],
+  "language": "zh"
 }
+```
+
+### Raw Diff SSE 流式分析
+
+```text
+POST /api/reviews/analyze-diff-stream
+```
+
+### GitHub PR SSE 流式分析
+
+```text
+POST /api/reviews/analyze-pr-stream
 ```
 
 ## 返回结构
@@ -233,12 +311,19 @@ llm:
   provider: openai-compatible
   base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
   api-key: ${DASHSCOPE_API_KEY:}
-  model: qwen-turbo
+  model: qwen3-coder-plus
   temperature: 0.2
   max-tokens: 4000
 ```
 
-如需切换 DeepSeek、OpenAI 或其他 OpenAI-compatible 服务，只需要修改配置，不需要改业务代码。
+选择 `qwen3-coder-plus` 的原因：
+
+- 更适合代码 diff 理解；
+- 更适合识别 bug risk、安全风险、测试缺失和可维护性问题；
+- 比轻量聊天模型更适合生成结构化 Review Findings；
+- 有利于提升 PR Review 建议的精确度。
+
+如需切换 DeepSeek、OpenAI、Qwen Max 或其他 OpenAI-compatible 服务，只需要修改配置，不需要改业务代码。
 
 如果未配置 `DASHSCOPE_API_KEY`，系统会安全降级：
 
@@ -294,18 +379,61 @@ PRPilot 通过 Prompt 和结构化上下文降低误报：
 - 不把纯风格偏好标为高危问题；
 - 输出结构化 severity、category、file、line、title、description、suggestion、confidence。
 
-## 如何运行后端
+## 本地运行与部署
 
-要求：
+下面命令适用于 Windows、macOS 和 Linux。需要分别启动后端和前端两个进程。
+
+### 前置要求
 
 - JDK 17；
-- Maven 3.9.x。
+- Maven 3.9.x；
+- Node.js 18+；
+- npm；
+- 可选：DashScope / 阿里云百炼 API Key；
+- 可选：GitHub Token，用于私有 PR 或 GitHub API 限流场景。
 
-启动：
+### 1. 配置模型 API Key
+
+如果不配置 `DASHSCOPE_API_KEY`，系统仍可运行，但会降级为规则分析模式，不生成 LLM Review Findings。
+
+Windows PowerShell：
+
+```powershell
+$env:DASHSCOPE_API_KEY="your_api_key_here"
+```
+
+Windows CMD：
+
+```bat
+set DASHSCOPE_API_KEY=your_api_key_here
+```
+
+macOS / Linux：
+
+```bash
+export DASHSCOPE_API_KEY=your_api_key_here
+```
+
+### 2. 启动后端
+
+Windows PowerShell / CMD：
+
+```bat
+cd backend
+mvn spring-boot:run
+```
+
+macOS / Linux：
 
 ```bash
 cd backend
 mvn spring-boot:run
+```
+
+后端默认地址：
+
+```text
+http://localhost:8080
 ```
 
 运行测试：
@@ -322,45 +450,46 @@ cd backend
 mvn -q -DskipTests package
 ```
 
-默认端口：
+### 3. 启动前端
 
-```text
-http://localhost:8080
+Windows PowerShell / CMD：
+
+```bat
+cd frontend
+npm install
+npm run dev
 ```
 
-## 如何运行前端
-
-要求：
-
-- Node.js；
-- npm。
-
-安装依赖：
+macOS / Linux：
 
 ```bash
 cd frontend
 npm install
-```
-
-启动开发服务器：
-
-```bash
-cd frontend
 npm run dev
 ```
 
-构建：
-
-```bash
-cd frontend
-npm run build
-```
-
-默认访问地址：
+前端默认地址：
 
 ```text
 http://localhost:3000
 ```
+
+生产构建：
+
+```bash
+cd frontend
+npm run build
+npm run start
+```
+
+### 4. 使用方式
+
+- 打开 `http://localhost:3000`；
+- 可点击 Try Demo 直接体验；
+- 可输入 GitHub PR URL 分析公开 PR；
+- 可填写 GitHub Token 分析私有 PR 或规避 API 限流；
+- 可粘贴 Raw Diff 分析任意代码变更；
+- 分析过程中页面会通过 SSE 逐步展示阶段进度，完成的阶段会依次变绿。
 
 ## 环境变量配置
 
@@ -382,7 +511,7 @@ GitHub Token 是可选的：
 
 ## examples/demo-app 说明
 
-`examples/demo-app` 是一个受控演示样例应用，用于后续构造 Demo PR。
+`examples/demo-app` 是一个受控演示样例应用，用于构造 Demo PR。
 
 设计原则：
 
@@ -396,53 +525,18 @@ GitHub Token 是可选的：
 
 Demo PR: [https://github.com/Sunshine-skyy/prpilot/pull/19](https://github.com/Sunshine-skyy/prpilot/pull/19)
 
-计划使用 `examples/demo-app` 构造一个受控风险 PR，包含：
-
-- token 校验弱化；
-- 打印 token；
-- TODO；
-- 权限校验绕过；
-- 配置文件修改；
-- 明显 fake secret；
-- 缺少测试更新。
-
 该 PR 仅用于 PRPilot 演示，不应合并到 `main`。
 
 ## Docker 说明
 
-当前版本优先支持本地普通运行方式。Docker Compose 是可选增强项，如时间允许会在后续 PR 中补充：
+当前版本优先支持本地普通运行方式。Docker Compose 是可选增强项，当前不是核心运行方式。
+
+如果后续补充 Docker，可以增加：
 
 - `backend/Dockerfile`；
 - `frontend/Dockerfile`；
 - `docker-compose.yml`；
 - Docker 本地演示说明。
-
-如最终未实现 Docker，不影响核心功能运行。
-
-## 第三方依赖和框架
-
-### 后端依赖
-
-- Spring Boot Starter Web；
-- Spring Boot Starter Validation；
-- Spring Boot Starter WebFlux；
-- Spring Boot Starter Test；
-- Jackson；
-- Maven。
-
-### 前端依赖
-
-- Next.js；
-- React；
-- React DOM；
-- TypeScript；
-- Tailwind CSS；
-- lucide-react；
-- clsx；
-- tailwind-merge；
-- class-variance-authority；
-- tailwindcss-animate；
-- Radix Slot。
 
 ## 原创功能说明
 
@@ -450,38 +544,128 @@ Demo PR: [https://github.com/Sunshine-skyy/prpilot/pull/19](https://github.com/S
 
 - GitHub PR URL 分析链路；
 - Raw Diff 分析链路；
+- SSE 流式分析进度；
 - 规则风险引擎；
 - 风险评分和文件风险标签；
 - LLM 上下文构建；
 - Review Prompt 构建；
 - OpenAI-compatible LLM Client；
 - Markdown Review Report 生成；
+- Focus Areas 多选过滤和 finding 数量统计；
+- Finding 到 Diff 的定位预览；
 - Try Demo 快速体验入口；
 - 前端分析工作台；
 - How It Works 展示页；
 - 中文 / English 前端语言切换。
 
-## 开发过程摘要
+## 未来扩展方向
 
-项目按照每个 PR 只做一件事的方式持续开发。已完成的主要阶段包括：
+以下方向都基于当前产品流程中的实际需求，而不是泛泛而谈的功能列表。
 
-1. 初始化仓库；
-2. 项目脚手架；
-3. Monorepo 结构；
-4. Next.js 前端迁移；
-5. 后端 Demo API；
-6. 前端 Demo UI；
-7. GitHub PR Fetcher；
-8. 规则风险引擎；
-9. examples/demo-app；
-10. Raw Diff 分析；
-11. LLM 分析能力；
-12. 完整 GitHub PR 分析；
-13. 前端完整分析交互；
-14. How It Works 与架构说明；
-15. 前端 UI polish；
-16. 前端中英双语切换；
-17. 最终中英双语 README。
+### 1. 登录模块与仓库级历史记录
+
+后续可以加入登录模块，让用户把同一个项目仓库作为一个长期跟踪对象。每个仓库下面可以保存多次 PR 分析记录，包括：
+
+- PR URL；
+- 分析时间；
+- 使用的模型；
+- 风险分数；
+- finding 数量；
+- 高风险 finding；
+- Markdown 报告；
+- 本次分析是否已处理。
+
+这样 PRPilot 就不只是“一次性分析工具”，而可以变成按仓库跟踪 Review 风险的工具。团队可以回看某个仓库近期 PR 的风险变化，也可以对比同一个 PR 修改前后的分析结果。
+
+### 2. 仓库文件夹视图
+
+登录后可以按仓库组织数据，把每个仓库作为一个文件夹：
+
+```text
+Workspace
+└── owner/repo
+    ├── PR #12 analysis
+    ├── PR #13 analysis
+    └── PR #14 analysis
+```
+
+实际价值是让用户从“分析一次 PR”升级到“管理一个仓库的 Review 历史”。这对课程项目展示和真实团队协作都更有说服力。
+
+### 3. Severity 和 confidence 过滤
+
+当前已经支持按 Focus Areas 过滤。下一步可以增加：
+
+- Critical / High / Medium / Low 过滤；
+- confidence 阈值过滤；
+- 只显示高置信度高风险问题。
+
+实际价值是减少 AI 噪音，让 Reviewer 优先处理真正可能阻塞合并的问题。
+
+### 4. 文件列表展示 finding 数量
+
+当前 finding 可以跳转到对应 Diff。后续可以在文件卡片上显示：
+
+- 该文件有几个 findings；
+- 最高 severity；
+- 是否已查看。
+
+这样 Reviewer 可以按文件维度推进 Review，更接近真实代码审查习惯。
+
+### 5. 大 PR 分块分析
+
+真实项目中 PR 可能很大，直接把完整 diff 交给模型会带来上下文长度、成本和稳定性问题。后续可以按文件或 diff hunk 分块：
+
+1. 先用规则引擎筛出高风险文件；
+2. 对高风险文件调用 LLM 深度分析；
+3. 对低风险文件只做摘要；
+4. 最后合并结果生成总报告。
+
+实际价值是提升大 PR 的分析稳定性，并降低 token 成本。
+
+### 6. Filtered Markdown Report
+
+当前 Copy Report 复制完整报告。后续可以增加：
+
+- Copy Full Report；
+- Copy Filtered Report。
+
+当用户只选择 Security + Bug Risk 时，可以只导出当前筛选结果，方便发给对应负责人。
+
+### 7. GitHub PR 评论或 Check 集成
+
+当前结果展示在独立网页中。后续可以支持：
+
+- 生成 PR comment；
+- 创建 GitHub Check Run；
+- 对高置信度 finding 生成 inline comment。
+
+这能减少用户在 PRPilot 页面和 GitHub 页面之间来回复制的成本，让工具更贴近真实开发流程。
+
+### 8. 模型模式选择
+
+当前默认模型是 `qwen3-coder-plus`。后续可以在页面上提供简单模式，而不是直接暴露模型名：
+
+- Fast：低成本快速分析；
+- Deep：更强模型做深度 Review。
+
+实际价值是让用户在速度、成本和质量之间做选择。
+
+### 9. 团队自定义规则
+
+不同项目关注点不同。后续可以支持仓库级配置，例如：
+
+```yaml
+prpilot:
+  highRiskPaths:
+    - src/auth/**
+    - src/payment/**
+    - config/**
+  forbiddenPatterns:
+    - console.log
+    - TODO
+```
+
+这样团队可以把自己的 Review 规范接入 PRPilot，而不需要修改后端代码。
 
 ## Troubleshooting
 
@@ -511,6 +695,16 @@ Remove-Item -Recurse -Force .next
 npm run build
 ```
 
+### Webpack cache warning
+
+如果出现：
+
+```text
+[webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: Unexpected end of stream
+```
+
+通常是本地 `.next/cache` 缓存文件损坏或上一次进程中断导致，不影响成功构建。可以删除 `.next/cache` 后重新运行。
+
 ### Watt Toolkit / Java TLS / PKIX path building failed
 
 如果本地通过 Watt Toolkit 访问 GitHub，Java 后端调用 GitHub API 可能出现：
@@ -534,18 +728,6 @@ $env:JAVA_TOOL_OPTIONS="-Djavax.net.ssl.trustStoreType=Windows-ROOT"
 ```
 
 然后重新启动后端服务。
-
-## 未来扩展方向
-
-- GitHub App 集成；
-- PR inline comments；
-- 团队自定义 Review 规则；
-- AST / 静态分析增强；
-- 多模型对比；
-- 缓存和任务队列；
-- GitLab / Gitee 支持；
-- Docker Compose 一键本地演示；
-- 企业级审计和报告导出。
 
 ## 提交前说明
 
