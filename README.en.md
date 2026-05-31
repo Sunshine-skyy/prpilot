@@ -2,7 +2,7 @@
 
 中文版: [README.md](README.md)
 
-PRPilot is an AI-powered Pull Request Review Assistant for the pre-human-review stage. It helps developers and reviewers understand pull request changes, detect risky code, and generate structured review suggestions with a copyable Markdown report.
+PRPilot is an AI-powered Pull Request Review Assistant for the pre-human-review stage. It helps developers and reviewers understand PR changes, detect risky code, review structured findings, and generate a copyable Markdown report.
 
 > Challenge: Qiniu Cloud × XEngineer 72-hour challenge
 >
@@ -14,42 +14,69 @@ PRPilot is an AI-powered Pull Request Review Assistant for the pre-human-review 
 
 ## Product Positioning
 
-PRPilot does not replace human review. It prepares better review context before human reviewers spend time on the pull request.
-
-It helps users:
+PRPilot does not replace human review. It prepares review context before humans spend time on a pull request:
 
 - summarize what the PR changes;
-- identify risky files and risky patterns;
+- identify risky files and patterns;
 - generate review suggestions based on selected focus areas;
-- copy a structured Markdown report into a GitHub PR comment.
+- help reviewers locate high-risk code faster;
+- produce a copyable Markdown review report.
 
-## Core Features
+## Implemented Features
+
+### Analysis Inputs
 
 - GitHub PR URL analysis;
 - Raw Diff analysis;
-- Quick Try Demo experience;
-- Focus Areas selection;
-- Rule-based risk scan;
-- Risk score and risk level;
-- Pull request change summary;
+- Try Demo experience;
+- optional GitHub Token for private PRs or GitHub API rate limits.
+
+### Risk Analysis and Review Output
+
+- rule-based risk scan;
+- risk score and risk level;
+- PR change summary;
+- file-level risk tags;
 - LLM review findings;
 - Markdown review report;
 - Copy Report;
-- Dedicated How It Works page;
-- Chinese / English frontend language toggle;
-- Safe rule-only fallback when no LLM API key is configured.
+- rule-only fallback when no LLM API key is configured.
 
-## Flexible Analysis Inputs
+### SSE Streaming Progress
 
-PRPilot supports multiple analysis inputs for different development workflows:
+The backend provides:
 
-1. GitHub PR URL: suitable for analyzing GitHub pull requests directly;
-2. Raw Diff: useful when the repository cannot be accessed directly, when using another code hosting platform, or when only a specific diff should be reviewed;
-3. Try Demo: helps users quickly explore the product without configuring a GitHub token or LLM API key.
+- `POST /api/reviews/analyze-pr-stream`
+- `POST /api/reviews/analyze-diff-stream`
 
-This design lets users connect real pull requests while also supporting private repositories, restricted networks, and local diff review scenarios.
+During analysis, the frontend displays progress step by step. Completed stages turn green one by one, the active stage shows a loading state, and the latest progress message is shown. Stages include fetching PR data, parsing diffs, running risk rules, calling the LLM, generating the Markdown report, and completion.
 
-## Tech Stack
+### Focus Area Filtering
+
+- true multi-select behavior;
+- an `All` option to select or clear all focus areas;
+- all focus areas selected by default;
+- finding counts for each focus area;
+- total finding count on `All`;
+- empty states separated by cause: no generated findings, no selected focus areas, or no matching findings.
+
+### Diff and Finding Navigation
+
+- clicking a finding opens the related file diff preview;
+- target line highlighting when available;
+- long diff truncation for page performance;
+- clear empty states for missing patches, binary files, oversized diffs, or GitHub API omissions.
+
+### Frontend Experience
+
+- dedicated How It Works page;
+- Chinese / English language toggle;
+- responsive UI;
+- structured sections for overview, changed files, review findings, and Markdown report.
+
+## Tech Stack and Third-party Dependencies
+
+This project is not dependency-free. It uses backend and frontend frameworks and libraries. The core PR analysis pipeline, risk rules, context building, prompt building, Markdown report generation, SSE progress stream, and frontend interaction logic are implemented in this project.
 
 ### Backend
 
@@ -58,40 +85,40 @@ This design lets users connect real pull requests while also supporting private 
 - Spring Web;
 - Spring Validation;
 - Spring WebFlux WebClient;
+- Jackson;
 - Maven;
-- Jackson.
+- Spring Boot Starter Test.
 
 ### Frontend
 
 - Next.js 15;
 - React 19;
+- React DOM;
 - TypeScript;
 - Tailwind CSS;
-- shadcn/ui-ready configuration;
-- lucide-react.
+- lucide-react;
+- Radix Slot;
+- clsx;
+- tailwind-merge;
+- class-variance-authority;
+- tailwindcss-animate;
+- PostCSS.
 
 ### Model Integration
 
 - OpenAI-compatible API;
-- Default provider configuration: Alibaba Cloud DashScope compatible mode;
-- Default model: `qwen-turbo`.
+- default provider: Alibaba Cloud DashScope compatible mode;
+- default model: `qwen3-coder-plus`.
+
+`qwen3-coder-plus` is used because PRPilot focuses on code diff understanding, risk detection, and structured review finding generation rather than general chat.
 
 ## Repository Structure
 
 ```text
 PRPilot/
-├── .github/
-│   └── pull_request_template.md
 ├── backend/
 │   ├── pom.xml
 │   └── src/main/java/com/prpilot/
-│       ├── client/
-│       ├── config/
-│       ├── controller/
-│       ├── dto/
-│       ├── rule/
-│       ├── service/
-│       └── util/
 ├── frontend/
 │   ├── app/
 │   ├── components/
@@ -110,6 +137,7 @@ Frontend
   ├─ GitHub PR URL Input
   ├─ Raw Diff Input
   ├─ Focus Areas
+  ├─ SSE Progress Timeline
   ├─ Try Demo
   └─ Results / Markdown Report
 
@@ -128,75 +156,25 @@ External Services
   └─ OpenAI-compatible LLM API
 ```
 
-## Core Analysis Flow
-
-```text
-GitHub PR URL / Raw Diff
-↓
-Diff Fetcher / DiffParser
-↓
-Rule-based Risk Scan
-↓
-Context Builder
-↓
-Review Prompt Builder
-↓
-LLM Review Agent
-↓
-Structured Review Response
-↓
-Markdown Review Report
-```
-
 ## Backend APIs
 
-### Try Demo
-
 ```text
-GET /api/reviews/demo
-```
-
-Returns a fixed complete analysis response for offline demonstration.
-
-### Fetch GitHub PR
-
-```text
+GET  /api/reviews/demo
 POST /api/reviews/fetch-pr
-```
-
-```json
-{
-  "prUrl": "https://github.com/owner/repo/pull/123",
-  "githubToken": ""
-}
-```
-
-### Analyze Raw Diff
-
-```text
 POST /api/reviews/analyze-diff
-```
-
-```json
-{
-  "title": "Improve auth middleware",
-  "description": "This patch updates token validation.",
-  "diff": "diff --git a/src/auth/middleware.ts b/src/auth/middleware.ts ...",
-  "focusAreas": ["security", "testing"]
-}
-```
-
-### Analyze GitHub PR
-
-```text
 POST /api/reviews/analyze-pr
+POST /api/reviews/analyze-diff-stream
+POST /api/reviews/analyze-pr-stream
 ```
+
+Example request:
 
 ```json
 {
   "prUrl": "https://github.com/owner/repo/pull/123",
   "githubToken": "",
-  "focusAreas": ["security", "bug-risk", "testing"]
+  "focusAreas": ["security", "bug-risk", "testing"],
+  "language": "en"
 }
 ```
 
@@ -215,20 +193,9 @@ The main response type is `ReviewAnalysisResponse`:
 }
 ```
 
-Where:
-
-- `pullRequest`: title, author, branches, changed files, additions, deletions;
-- `changeSummary`: overview, key changes, impacted areas;
-- `riskAssessment`: risk score, risk level, reasons;
-- `files`: changed files with file-level risk tags;
-- `findings`: AI-generated review findings;
-- `markdownReport`: copyable Markdown report.
-
 ## Model Strategy
 
-PRPilot does not hard-code a model vendor in business logic.
-
-The backend uses a `LlmClient` interface and an `OpenAiCompatibleLlmClient` implementation.
+PRPilot does not hard-code a model vendor in business logic. The backend uses a `LlmClient` interface and an `OpenAiCompatibleLlmClient` implementation.
 
 Default configuration:
 
@@ -237,80 +204,67 @@ llm:
   provider: openai-compatible
   base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
   api-key: ${DASHSCOPE_API_KEY:}
-  model: qwen-turbo
+  model: qwen3-coder-plus
   temperature: 0.2
   max-tokens: 4000
 ```
 
-To switch to DeepSeek, OpenAI, or another OpenAI-compatible provider, only configuration needs to be changed.
-
-If `DASHSCOPE_API_KEY` is not configured, the system safely falls back to rule-only analysis:
-
-- rule-based risk scan still works;
-- risk score still works;
-- Markdown report still works;
-- `findings` returns an empty list.
+If `DASHSCOPE_API_KEY` is not configured, rule-based risk scanning, risk scoring, and Markdown report generation still work, while `findings` returns an empty list.
 
 ## Context Strategy
 
-Before calling the LLM, PRPilot builds structured context from:
+Before calling the LLM, PRPilot builds context from PR metadata, changed files, file patches, risk tags, rule-based risk score, risk reasons, and selected focus areas. Long patches are truncated and risky files are prioritized.
 
-- PR title, author, state, base/head branches;
-- changed files, additions, deletions;
-- file patches;
-- risk tags;
-- rule-based risk score, level, and reasons;
-- user-selected focus areas.
+## Local Run and Deployment
 
-Long patches are truncated to control context size, and risky files are prioritized.
+The following commands work on Windows, macOS, and Linux. Run backend and frontend as two separate processes.
 
-## Rule-based Risk Analysis
-
-The rule engine scans deterministic risk signals before LLM analysis, including:
-
-- large changes;
-- too many changed files;
-- missing test changes;
-- auth / login / token / permission changes;
-- database / migration / schema changes;
-- config / env / secret / key / password changes;
-- TODO / FIXME markers;
-- debug logging such as `console.log`;
-- potential empty catch blocks;
-- removed validation / guard / permission / authorization logic;
-- sensitive file changes.
-
-These signals are used to generate:
-
-- risk score;
-- risk level;
-- risk reasons;
-- file-level risk tags;
-- better evidence for LLM review.
-
-## False Positive Control
-
-PRPilot reduces noisy suggestions through prompt constraints and structured context:
-
-- findings must be supported by the provided diff and context;
-- the model must not invent missing files, code, or behavior;
-- weak evidence should lead to lower confidence;
-- style-only preferences should not be marked as high severity;
-- output must include structured severity, category, file, line, title, description, suggestion, and confidence.
-
-## Run Backend
-
-Requirements:
+### Requirements
 
 - JDK 17;
-- Maven 3.9.x.
+- Maven 3.9.x;
+- Node.js 18+;
+- npm;
+- optional DashScope / Alibaba Cloud Bailian API key;
+- optional GitHub Token.
 
-Start the backend:
+### Configure the Model API Key
+
+Windows PowerShell:
+
+```powershell
+$env:DASHSCOPE_API_KEY="your_api_key_here"
+```
+
+Windows CMD:
+
+```bat
+set DASHSCOPE_API_KEY=your_api_key_here
+```
+
+macOS / Linux:
+
+```bash
+export DASHSCOPE_API_KEY=your_api_key_here
+```
+
+### Start the Backend
+
+Windows PowerShell / CMD:
+
+```bat
+cd backend
+mvn spring-boot:run
+```
+
+macOS / Linux:
 
 ```bash
 cd backend
 mvn spring-boot:run
 ```
+
+Default backend URL: `http://localhost:8080`
 
 Run tests:
 
@@ -326,178 +280,91 @@ cd backend
 mvn -q -DskipTests package
 ```
 
-Default backend URL:
+### Start the Frontend
 
-```text
-http://localhost:8080
+Windows PowerShell / CMD:
+
+```bat
+cd frontend
+npm install
+npm run dev
 ```
 
-## Run Frontend
-
-Requirements:
-
-- Node.js;
-- npm.
-
-Install dependencies:
+macOS / Linux:
 
 ```bash
 cd frontend
 npm install
-```
-
-Start development server:
-
-```bash
-cd frontend
 npm run dev
 ```
 
-Build:
+Default frontend URL: `http://localhost:3000`
+
+Production build:
 
 ```bash
 cd frontend
 npm run build
+npm run start
 ```
-
-Default frontend URL:
-
-```text
-http://localhost:3000
-```
-
-## Environment Variables
-
-### LLM API Key
-
-```bash
-DASHSCOPE_API_KEY=your_api_key_here
-```
-
-Do not commit `.env` or any real API key.
-
-### GitHub Token
-
-GitHub Token is optional:
-
-- it can be entered temporarily in the frontend input;
-- it is useful for private PRs or GitHub API rate limits;
-- it is not stored in the repository.
 
 ## examples/demo-app
 
-`examples/demo-app` is a controlled sample app for creating a demo pull request.
-
-Design principles:
-
-- the demo app on `main` remains a safe baseline;
-- reviewable risks are introduced only through a separate demo PR;
-- the demo PR should remain open and should not be merged;
-- no real secrets are included;
-- fake secrets must be clearly fake.
-
-## Demo PR
+`examples/demo-app` is a controlled sample app for creating a demo pull request. The demo app on `main` remains a safe baseline. Reviewable risks are introduced only through a separate demo PR. The demo PR should remain open and should not be merged.
 
 Demo PR: [https://github.com/Sunshine-skyy/prpilot/pull/19](https://github.com/Sunshine-skyy/prpilot/pull/19)
 
-Planned controlled risks:
+## Future Work
 
-- weakened token validation;
-- token logging;
-- TODO marker;
-- permission check bypass;
-- config file change;
-- clearly fake secret;
-- missing test update.
+These items are based on practical product needs in the current workflow.
 
-The demo PR is for PRPilot demonstration only and should not be merged into `main`.
+### 1. Login and Repository-level Analysis History
 
-## Docker
+A future login module can let users treat each repository as a long-term tracked workspace. Each repository can store PR analysis records with PR URL, analysis time, model used, risk score, finding count, high-risk findings, Markdown report, and handled status. This turns PRPilot from a one-time analysis tool into repository-level review risk tracking.
 
-The current version prioritizes standard local development commands. Docker Compose is an optional enhancement and may be added in a later PR if time allows:
+### 2. Repository Folder View
 
-- `backend/Dockerfile`;
-- `frontend/Dockerfile`;
-- `docker-compose.yml`;
-- local Docker demo instructions.
+After login, data can be organized by repository:
 
-If Docker is not implemented, the core application can still run normally through the local commands above.
+```text
+Workspace
+└── owner/repo
+    ├── PR #12 analysis
+    ├── PR #13 analysis
+    └── PR #14 analysis
+```
 
-## Third-party Dependencies
+### 3. Severity and Confidence Filtering
 
-### Backend
+Add severity and confidence threshold filtering so reviewers can prioritize high-confidence high-risk findings.
 
-- Spring Boot Starter Web;
-- Spring Boot Starter Validation;
-- Spring Boot Starter WebFlux;
-- Spring Boot Starter Test;
-- Jackson;
-- Maven.
+### 4. Finding Counts on File Cards
 
-### Frontend
+Show how many findings belong to each file, the highest severity, and whether the file has been viewed.
 
-- Next.js;
-- React;
-- React DOM;
-- TypeScript;
-- Tailwind CSS;
-- lucide-react;
-- clsx;
-- tailwind-merge;
-- class-variance-authority;
-- tailwindcss-animate;
-- Radix Slot.
+### 5. Chunked Analysis for Large PRs
 
-## Original Work
+Use rule-based scanning to identify high-risk files, run deep LLM analysis only on those files, summarize low-risk files, and merge results into one report.
 
-This project is implemented around the AI PR Review scenario. Core original work includes:
+### 6. Filtered Markdown Report
 
-- GitHub PR URL analysis pipeline;
-- Raw Diff analysis pipeline;
-- rule-based risk engine;
-- risk score and file-level risk tags;
-- LLM context builder;
-- review prompt builder;
-- OpenAI-compatible LLM client;
-- Markdown review report generator;
-- quick Try Demo experience;
-- frontend analysis workspace;
-- How It Works page;
-- Chinese / English frontend language toggle.
+Provide Copy Full Report and Copy Filtered Report so users can export only the currently selected findings.
 
-## Development Process Summary
+### 7. GitHub PR Comment or Check Integration
 
-The project has been developed with small focused PRs. Major stages include:
+Support PR comments, GitHub Check Runs, and inline comments for high-confidence findings.
 
-1. Repository initialization;
-2. Project scaffolding;
-3. Monorepo structure;
-4. Next.js frontend migration;
-5. Backend demo API;
-6. Frontend demo UI;
-7. GitHub PR fetcher;
-8. Rule-based risk engine;
-9. `examples/demo-app`;
-10. Raw Diff analysis;
-11. LLM analysis capability;
-12. Full GitHub PR analysis;
-13. Frontend analysis flows;
-14. How It Works and architecture overview;
-15. Frontend UI polish;
-16. Frontend Chinese / English language toggle;
-17. Final bilingual README.
+### 8. Model Mode Selection
+
+Expose simple modes such as Fast and Deep instead of raw model names.
+
+### 9. Team-specific Rules
+
+Support repository-level high-risk paths and forbidden patterns without changing backend code.
 
 ## Troubleshooting
 
 ### Next.js `.next/trace` EPERM on Windows
-
-On Windows, `npm run build` may fail with:
-
-```text
-Error: EPERM: operation not permitted, open '...frontend\\.next\\trace'
-```
-
-This is usually not a code issue. It means `.next/trace` is locked by Node, the IDE, or a previous Next.js process.
 
 Git Bash:
 
@@ -515,23 +382,25 @@ Remove-Item -Recurse -Force .next
 npm run build
 ```
 
-### Watt Toolkit / Java TLS / PKIX path building failed
+### Webpack cache warning
 
-When using Watt Toolkit to access GitHub, the Java backend may fail with:
+If this warning appears:
 
 ```text
-PKIX path building failed
+[webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: Unexpected end of stream
 ```
 
-The reason is that Watt Toolkit's HTTPS proxy certificate is not trusted by Java's default truststore.
+It is usually caused by a corrupted `.next/cache` file or a previously interrupted process. It does not affect a successful build.
 
-Set the following system environment variable:
+### Watt Toolkit / Java TLS / PKIX path building failed
+
+Set:
 
 ```text
 JAVA_TOOL_OPTIONS=-Djavax.net.ssl.trustStoreType=Windows-ROOT
 ```
 
-Or set it temporarily in PowerShell:
+Or in PowerShell:
 
 ```powershell
 $env:JAVA_TOOL_OPTIONS="-Djavax.net.ssl.trustStoreType=Windows-ROOT"
@@ -539,28 +408,6 @@ $env:JAVA_TOOL_OPTIONS="-Djavax.net.ssl.trustStoreType=Windows-ROOT"
 
 Then restart the backend service.
 
-## Future Work
-
-- GitHub App integration;
-- PR inline comments;
-- team-specific review rules;
-- AST / static analysis enhancement;
-- multi-model comparison;
-- caching and task queue;
-- GitLab / Gitee support;
-- Docker Compose local demo;
-- enterprise audit and report export.
-
 ## Final Submission Notes
 
-The repository should remain private during the development period and be made public only when required by the challenge rules.
-
-Do not commit:
-
-- `.env`;
-- real API keys;
-- real GitHub tokens;
-- `node_modules`;
-- `.next`;
-- `target`;
-- any real secrets.
+Do not commit `.env`, real API keys, real GitHub tokens, `node_modules`, `.next`, `target`, or any real secrets.
