@@ -49,6 +49,9 @@ class ReviewAnalysisServiceTest {
                 "Avoid logging tokens",
                 "The diff logs a bearer token.",
                 "Remove token logging.",
+                null,
+                null,
+                null,
                 0.9
         );
         ReviewAnalysisService reviewAnalysisService = newReviewAnalysisService(
@@ -67,7 +70,8 @@ class ReviewAnalysisServiceTest {
         AnalyzePullRequestRequest request = new AnalyzePullRequestRequest(
                 "https://github.com/example/repo/pull/12",
                 "",
-                List.of("security", "testing")
+                List.of("security", "testing"),
+                "en"
         );
         PullRequestInfo pullRequest = new PullRequestInfo(
                 "Update auth middleware",
@@ -123,7 +127,8 @@ class ReviewAnalysisServiceTest {
                         + // TODO: tighten validation
                           return user
                         """,
-                List.of("security", "testing")
+                List.of("security", "testing"),
+                "en"
         );
     }
 
