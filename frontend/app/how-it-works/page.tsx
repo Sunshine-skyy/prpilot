@@ -7,7 +7,7 @@ import { isLanguage, languageNames, languageStorageKey, type Language } from '@/
 
 const steps = {
   zh: [
-    ['01', 'GitHub PR URL / Raw Diff', '用户可以分析真实 GitHub PR、粘贴 Raw Diff，或使用 Try Demo 作为离线兜底。'],
+    ['01', 'GitHub PR URL / Raw Diff', '用户可以直接分析 GitHub PR，也可以粘贴 Raw Diff 来评审来自不同代码托管平台或本地环境的变更。'],
     ['02', 'Diff 获取', 'PRPilot 通过 GitHub API 或 Raw Diff 输入收集 PR 元数据、变更文件、增删行和 patch。'],
     ['03', '规则风险扫描', '确定性规则引擎识别安全、测试、配置、认证、日志和校验相关风险信号。'],
     ['04', '上下文构建', '后端根据关注方向和规则证据，为模型构造紧凑的结构化上下文。'],
@@ -15,7 +15,7 @@ const steps = {
     ['06', 'Markdown 报告', '最终结果包含 PR 总结、风险评估、Review 建议、变更文件和可复制的 Markdown 报告。'],
   ],
   en: [
-    ['01', 'GitHub PR URL / Raw Diff', 'Users can analyze a real GitHub pull request, paste a raw diff, or use Try Demo as an offline fallback.'],
+    ['01', 'GitHub PR URL / Raw Diff', 'Users can analyze a GitHub pull request directly or paste a raw diff from another code hosting platform or local environment.'],
     ['02', 'Diff Fetcher', 'PRPilot collects PR metadata, changed files, additions, deletions, and patches through GitHub API or raw input.'],
     ['03', 'Rule-based Risk Scan', 'A deterministic rule engine identifies security, testing, config, auth, logging, and validation risk signals.'],
     ['04', 'Context Builder', 'The backend builds compact structured context for the model with focus areas and evidence-backed risk hints.'],
@@ -30,7 +30,7 @@ const cards = {
     ['风险分析', '规则信号覆盖大规模 diff、缺少测试、认证变更、配置关键字、TODO/FIXME、调试日志、空 catch 和删除校验逻辑。', ShieldCheck],
     ['上下文策略', 'PRPilot 将噪声较大的 diff 压缩为结构化上下文，包括 PR 元数据、变更文件、patch、关注方向和规则证据。', FileSearch],
     ['误报控制', 'Prompt 要求模型只报告有证据支撑的问题，在证据不足时降低置信度，并避免无关的高危结论。', Sparkles],
-    ['兜底模式', '当 GitHub API 或 LLM 不可用时，Raw Diff 分析和 Try Demo 仍然可以保证产品可演示。', Workflow],
+    ['多输入分析', 'GitHub PR URL 适合直接分析 Pull Request，Raw Diff 适合跨平台、私有仓库或本地 diff 场景，Try Demo 则用于无需配置即可快速体验产品能力。', Workflow],
     ['未来扩展', '后续可以扩展 GitHub App、inline comments、团队规则、AST 分析、缓存，以及 GitLab / Gitee 支持。', GitPullRequestArrow],
   ],
   en: [
@@ -38,7 +38,7 @@ const cards = {
     ['Risk Analysis', 'Rule-based signals catch large diffs, missing tests, auth changes, config keywords, TODO/FIXME, debug logs, empty catch blocks, and removed validation.', ShieldCheck],
     ['Context Strategy', 'PRPilot reduces noisy diffs into structured context: PR metadata, changed files, patches, focus areas, and rule evidence.', FileSearch],
     ['False Positive Control', 'Prompts ask the model to report only evidence-backed findings, lower confidence when evidence is weak, and avoid unrelated high-severity comments.', Sparkles],
-    ['Fallback Modes', 'Raw Diff analysis and Try Demo make the product usable even when GitHub API or LLM access is unavailable.', Workflow],
+    ['Flexible Inputs', 'GitHub PR URL works for direct pull request analysis, Raw Diff supports cross-platform or local diff review, and Try Demo helps users quickly explore the product without setup.', Workflow],
     ['Future Extensions', 'Potential extensions include GitHub App integration, inline comments, team rules, AST analysis, caching, and GitLab or Gitee support.', GitPullRequestArrow],
   ],
 };

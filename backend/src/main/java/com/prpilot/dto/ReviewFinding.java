@@ -8,6 +8,9 @@ public record ReviewFinding(
         String title,
         String description,
         String suggestion,
+        String titleZh,
+        String descriptionZh,
+        String suggestionZh,
         double confidence
 ) {
 }
