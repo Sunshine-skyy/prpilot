@@ -18,7 +18,9 @@ async function requestJson<TResponse>(path: string, init?: RequestInit): Promise
   return response.json() as Promise<TResponse>;
 }
 
-async function requestAnalysisStream(path: string, request: AnalyzeDiffRequest | AnalyzePullRequestRequest, onEvent: (event: ReviewAnalysisStreamEvent) => void): Promise<ReviewAnalysisResponse> {
+type StreamEventHandler = (event: ReviewAnalysisStreamEvent) => void | Promise<void>;
+
+async function requestAnalysisStream(path: string, request: AnalyzeDiffRequest | AnalyzePullRequestRequest, onEvent: StreamEventHandler): Promise<ReviewAnalysisResponse> {
   const response = await fetch(path, {
     method: 'POST',
     headers: {
@@ -51,7 +53,7 @@ async function requestAnalysisStream(path: string, request: AnalyzeDiffRequest |
     for (const chunk of chunks) {
       const event = parseStreamEvent(chunk);
       if (!event) continue;
-      onEvent(event);
+      await onEvent(event);
       if (event.status === 'completed' && event.result) {
         result = event.result;
       }
@@ -66,7 +68,7 @@ async function requestAnalysisStream(path: string, request: AnalyzeDiffRequest |
   if (!result) {
     const event = parseStreamEvent(buffer);
     if (event) {
-      onEvent(event);
+      await onEvent(event);
       if (event.status === 'completed' && event.result) result = event.result;
       if (event.status === 'error') throw new Error(event.message || 'Analysis failed.');
     }
@@ -108,10 +110,10 @@ export async function analyzeRawDiff(request: AnalyzeDiffRequest): Promise<Revie
   });
 }
 
-export async function streamPullRequestAnalysis(request: AnalyzePullRequestRequest, onEvent: (event: ReviewAnalysisStreamEvent) => void): Promise<ReviewAnalysisResponse> {
+export async function streamPullRequestAnalysis(request: AnalyzePullRequestRequest, onEvent: StreamEventHandler): Promise<ReviewAnalysisResponse> {
   return requestAnalysisStream('/api/reviews/analyze-pr-stream', request, onEvent);
 }
 
-export async function streamRawDiffAnalysis(request: AnalyzeDiffRequest, onEvent: (event: ReviewAnalysisStreamEvent) => void): Promise<ReviewAnalysisResponse> {
+export async function streamRawDiffAnalysis(request: AnalyzeDiffRequest, onEvent: StreamEventHandler): Promise<ReviewAnalysisResponse> {
   return requestAnalysisStream('/api/reviews/analyze-diff-stream', request, onEvent);
 }
